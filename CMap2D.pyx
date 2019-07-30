@@ -47,9 +47,9 @@ cdef class CMap2D:
         map_file = os.path.join(folder, mapparams["image"])
         print("Map definition found. Loading map from {}".format(map_file))
         mapimage = imread(map_file)
-        mapimage = np.ascontiguousarray(
-            1. - mapimage.T[:, ::-1] / 254.
-        ).astype(np.float32)  # (0 to 1) 1 means 100% certain occupied
+        temp = (1. - mapimage.T[:, ::-1] / 254.).astype(np.float32)
+              # (0 to 1) 1 means 100% certain occupied
+        mapimage = np.ascontiguousarray(temp)
         self.occupancy_ = mapimage
         self.occupancy_shape0 = mapimage.shape[0]
         self.occupancy_shape1 = mapimage.shape[1]
@@ -78,7 +78,45 @@ cdef class CMap2D:
     def as_occupied_points_ij(self):
         return np.ascontiguousarray(np.array(np.where(self.occupancy() > self.thresh_occupied())).T)
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    @cython.cdivision(True)
+    cdef cas_sdf(self, np.int64_t[:,::1] occupied_points_ij, np.float32_t[:, ::1] min_distances):
+        """ everything in ij units """
+        cdef np.int64_t[:] point
+        cdef np.int64_t pi
+        cdef np.int64_t pj
+        cdef np.float32_t norm
+        cdef np.int64_t i
+        cdef np.int64_t j 
+        cdef np.float32_t smallest_dist
+        cdef int n_occupied_points_ij = len(occupied_points_ij)
+        for i in range(min_distances.shape[0]):
+            for j in range(min_distances.shape[1]):
+                smallest_dist = min_distances[i, j]
+                for k in range(n_occupied_points_ij):
+                    point = occupied_points_ij[k]
+                    pi = point[0]
+                    pj = point[1]
+                    norm = csqrt((pi - i) ** 2 + (pj - j) ** 2)
+                    if norm < smallest_dist:
+                        smallest_dist = norm
+                min_distances[i, j] = smallest_dist
+
+    def distance_transform_2d(self):
+        f = np.zeros_like(self.occupancy(), dtype=np.float32)
+        f[self.occupancy() <= self.thresh_occupied()] = np.inf
+        D = np.ones_like(self.occupancy(), dtype=np.float32) * np.inf
+        cdistance_transform_2d(f, D)
+        return np.sqrt(D)*self.resolution()
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    @cython.cdivision(True)
     cdef cas_tsdf(self, np.float32_t max_dist_m, np.int64_t[:,::1] occupied_points_ij, np.float32_t[:, ::1] min_distances):
+        # DEPRECATED
         """ everything in ij units """
         cdef np.int64_t max_dist_ij = np.int64((max_dist_m / self.resolution_))
         cdef np.int64_t[:] point
@@ -101,7 +139,7 @@ cdef class CMap2D:
             while True:
                 j = max(pj - max_dist_ij, 0)
                 while True:
-                    norm = sqrt((pi - i) ** 2 + (pj - j) ** 2)
+                    norm = csqrt((pi - i) ** 2 + (pj - j) ** 2)
                     if norm < min_distances[i, j]:
                         min_distances[i, j] = norm
                     j = j+1
@@ -110,15 +148,6 @@ cdef class CMap2D:
                 if i >= iend: break
 
     def as_tsdf(self, max_dist_m):
-        if False:
-            occupied_points_ij = self.as_occupied_points_ij()
-            max_dist_ij = (max_dist_m / self.resolution_)
-            min_distances_ij = np.ones((self.occupancy_shape0, self.occupancy_shape1), dtype=np.float32) * max_dist_ij
-            self.cas_tsdf(max_dist_m, occupied_points_ij, min_distances_ij)
-            # Change from i, j units to x, y units [meters]
-            min_distances = min_distances_ij * self.resolution_
-            # Switch sign for occupied and unkown points (*signed* distance field)
-            min_distances[self.occupancy() > self.thresh_free] *= -1.
         # this is faster than the still poorly optimized cas_tsdf
         min_distances = self.as_sdf()
         min_distances[min_distances > max_dist_m] = max_dist_m
@@ -282,25 +311,7 @@ cdef class CMap2D:
         return occ_T
 
     def as_sdf(self, raytracer=None):
-        NUMBA = False
-        RANGE_LIBC = True
-        occupied_points_ij = np.array(self.as_occupied_points_ij())
-        min_distances = np.ones(self.occupancy_.shape) * self.HUGE_
-        if NUMBA:
-#             compiled_sdf_math(occupied_points_ij, min_distances)
-            pass
-        if RANGE_LIBC:
-            if raytracer is None:
-                import range_libc
-
-                pyomap = range_libc.PyOMap(self.occupancy_T() >= self.thresh_occupied_)
-                rm = range_libc.PyRayMarching(pyomap, self.occupancy_shape0)
-                min_distances = np.zeros((self.occupancy_shape0, self.occupancy_shape1), dtype=np.float32)
-                rm.get_dist(min_distances)
-            else:
-                min_distances = raytracer.get_dist()
-        # Change from i, j units to x, y units [meters]
-        min_distances = min_distances * self.resolution_
+        min_distances = self.distance_transform_2d()
         # Switch sign for occupied and unkown points (*signed* distance field)
         min_distances[self.occupancy() > self.thresh_free] *= -1.
         return min_distances
@@ -838,6 +849,96 @@ cdef class CSimAgent:
             return left_leg_pose2d_in_map_frame, right_leg_pose2d_in_map_frame
         else:
             raise NotImplementedError
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.nonecheck(False)
+@cython.cdivision(True)
+cdef cas_sdf(self, np.int64_t[:,::1] occupied_points_ij, np.float32_t[:, ::1] min_distances):
+    """ everything in ij units """
+    cdef np.int64_t[:] point
+    cdef np.int64_t pi
+    cdef np.int64_t pj
+    cdef np.float32_t norm
+    cdef np.int64_t i
+    cdef np.int64_t j 
+    cdef np.float32_t smallest_dist
+    cdef int n_occupied_points_ij = len(occupied_points_ij)
+    for i in range(min_distances.shape[0]):
+        for j in range(min_distances.shape[1]):
+            smallest_dist = min_distances[i, j]
+            for k in range(n_occupied_points_ij):
+                point = occupied_points_ij[k]
+                pi = point[0]
+                pj = point[1]
+                norm = csqrt((pi - i) ** 2 + (pj - j) ** 2)
+                if norm < smallest_dist:
+                    smallest_dist = norm
+            min_distances[i, j] = smallest_dist
+
+cdef cdistance_transform_1d(np.float32_t[::1] f, np.float32_t[::1] D):
+    """ based on 'Distance Transforms of Sampled Functions' by Felzenswalb et al """
+    if f.shape[0] != D.shape[0]:
+        raise IndexError
+    cdef np.float32_t[::1] z = np.zeros((f.shape[0]+1), dtype=np.float32) # z[i] intersection between lowest parabola i and lowest parabola i-1
+    cdef np.int64_t[::1] v = np.zeros((f.shape[0]), dtype=np.int64) # the positions of parabolas forming the lower envelope
+    cdef np.int64_t k  = 0 # the amount of parabolas forming the lower envelope (- 1 for indexing)
+    cdef np.int64_t max_k  = 0 # the amount of parabolas forming the lower envelope (- 1 for indexing)
+    cdef np.int64_t start = 0 
+    cdef np.int64_t vk = 0 # var for speed
+    z[0] = -np.inf # boundary with previous
+    z[1] = np.inf # boundary with next
+    # find and add the first non-inf parabola to the lower envelope
+    for q in range(0, f.shape[0]):
+        if f[q] == np.inf:
+            continue
+        v[0] = q
+        z[0] = -np.inf # boundary with previous
+        z[1] = np.inf # boundary with next
+        break
+    start = v[k] + 1 # start after the first non-inf parabola
+    for q in range(start, f.shape[0]):
+        if f[q] == np.inf: # inf parabolas are too 'high' to affect lower envelope
+            continue
+        while True:
+            vk = v[k]
+            s = ((f[q] + q*q) - (f[vk] + vk*vk)) / (2*q - 2*vk) # boundary with previous parabola
+            if s <= z[k]:
+                # the boundary between this and the previous parabola is before the boundary between the previous and its predecessor
+                # the latest parabola obsoletes the previous one, erase the previous one from the L.E
+                k = k-1
+            elif s > z[k]:
+                # normal situation, add this parabola to the L.E and continue
+                k = k+1
+                v[k] = q
+                z[k] = s
+                z[k + 1] = np.inf
+                break
+    max_k = k
+    k = 0
+    for q in range(f.shape[0]):
+        # find the parabola corresponding to the current L.E section (where z[k] < q < z[k+1])
+        # move k forward until the boundary with next is later than q
+        while z[k+1] < q:
+            k = k+1
+        vk = v[k]
+        D[q] = f[vk] + (q - vk)**2
+
+cdef cdistance_transform_2d(np.float32_t[:, ::1] f, np.float32_t[:, ::1] D):
+    cdef np.float32_t[:, ::1] f_T = np.ascontiguousarray(np.copy(f).T)
+    cdef np.float32_t[:, ::1] D_after_vertical_pass_T = np.ascontiguousarray(np.copy(D).T)
+    cdef np.float32_t[:, ::1] D_after_vertical_pass
+    # vertical pass
+    for j in range(f.shape[1]):
+        cdistance_transform_1d(f_T[j,:] , D_after_vertical_pass_T[j,:])
+    D_after_vertical_pass = np.ascontiguousarray(np.copy(D_after_vertical_pass_T).T)
+    # vertical pass
+    # horizontal pass
+    for i in range(f.shape[0]):
+        cdistance_transform_1d(D_after_vertical_pass[i,:] , D[i,:])
+
+
+
 
 @cython.boundscheck(False)
 @cython.wraparound(False)

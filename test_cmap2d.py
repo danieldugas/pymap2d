@@ -1,6 +1,7 @@
 import CMap2D
 import numpy as np
 import matplotlib.pyplot as plt
+from timeit import default_timer as timer
 
 def gridshow(*args, **kwargs):
     """ utility function for showing 2d grids in matplotlib """
@@ -17,10 +18,31 @@ ij = cmap2d.xy_to_ij(np.array([[0, 0], [1,1]], dtype=np.float32))
 print(ij)
 xy = cmap2d.ij_to_xy(ij.astype(np.float32))
 print(xy)
-gridshow(cmap2d.occupancy())
-plt.show()
-gridshow(cmap2d.as_sdf())
-plt.show()
+
+plt.figure() 
+grid = cmap2d.occupancy()
+gridshow(grid)
+
+plt.figure()
+tic = timer()
+grid = cmap2d.as_sdf()
+a = grid
+toc = timer()
+print("SDF: {} ms".format((toc-tic)*0.001))
+gridshow(grid)
+
+plt.figure()
+tic = timer()
+grid = cmap2d.as_tsdf(0.5)
+toc = timer()
+print("TSDF : {} ms".format((toc-tic)*0.001))
+gridshow(grid)
+
+plt.figure()
+tic = timer()
 ij = coarse.xy_to_ij(np.array([[0, 0]], dtype=np.float32))
-gridshow(coarse.dijkstra(ij[0], inv_value=-1))
+grid = coarse.dijkstra(ij[0], inv_value=-1)
+toc = timer()
+print("Dijsktra : {} ms".format((toc-tic)*0.001))
+gridshow(grid)
 plt.show()
