@@ -1,5 +1,10 @@
 import numpy as np
 
+def Pose2D(tf_msg):
+    import tf
+    return np.array([tf_msg[0][0], tf_msg[0][1], 
+        tf.transformations.euler_from_quaternion(tf_msg[1])[2]])
+
 def apply_tf(x, pose2d):
     # x is in frame B
     # pose2d is AT_B
