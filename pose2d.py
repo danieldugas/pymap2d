@@ -6,6 +6,36 @@ def Pose2D(tf_msg):
         tf.transformations.euler_from_quaternion(tf_msg[1])[2]])
 
 def apply_tf(x, pose2d):
+    """ Applies transform to x
+    x is a list of x y points
+    pose2d is the transform AT_B, 
+    i.e. trans/rot of frame B in frame A, thus AT_B * BX => AX
+
+    Parameters
+    ----------
+        pose2d : np.array
+            Array of shape (3,), x, y, theta components of the tf of frame B in frame A
+        x: np.array
+            Array of shape (N, 2), x, y coordinates of N points in frame B
+    Returns
+    -------
+        result: np.array
+            Array of shape (N, 2), x, y coordinates of N points in frame A
+
+    Note
+    ----
+    pose2d is under the form [x, y, theta], where 
+    x and y are coordinates of frame B in frame A, 
+    and theta is the orientation of frame B in frame A.
+
+    Example
+    -------
+    >>> BX = np.array([[0, 0], [1, 0]])
+    >>> AT_B = np.array([2, 1, np.pi/2])
+    >>> apply_tf(BX, AT_B)
+    array([[ 2.,  1.],
+           [ 2.,  2.]])
+    """
     # x is in frame B
     # pose2d is AT_B
     # result is x in frame A
@@ -36,3 +66,9 @@ def inverse_pose2d(pose2d):
     inv_th = -pose2d[2] # theta
     inv_xy = rotate(np.array([-pose2d[:2]]), inv_th)[0]
     return np.array([inv_xy[0], inv_xy[1], inv_th])
+
+
+if __name__ == "__main__":
+    import doctest
+
+    doctest.testmod()
