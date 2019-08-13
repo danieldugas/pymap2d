@@ -342,7 +342,7 @@ cdef class CMap2D:
         return coarse
 
 
-    def dijkstra(self, goal_ij, mask=None, extra_costs=None, inv_value=None):
+    def dijkstra(self, goal_ij, mask=None, extra_costs=None, inv_value=None, eight_connected=True):
         kEdgeLength = 1 * self.resolution_  # meters
         # Initialize bool arrays
         open_ = np.ones((self.occupancy_shape0, self.occupancy_shape1), dtype=np.bool)
@@ -365,7 +365,11 @@ cdef class CMap2D:
         tentative[goal_ij[0], goal_ij[1]] = 0
         to_visit = [(goal_ij[0], goal_ij[1])]
         not_in_to_visit[goal_ij[0], goal_ij[1]] = False
-        neighbor_offsets = [[0, 1], [1, 0], [0, -1], [-1, 0]]
+        if eight_connected:
+            neighbor_offsets = [[0, 1], [1, 0], [0, -1], [-1, 0],
+                                [1, 1], [1, -1], [-1, 1], [-1, -1]]
+        else:
+            neighbor_offsets = [[0, 1], [1, 0], [0, -1], [-1, 0]]
         len_i = tentative.shape[0]
         len_j = tentative.shape[1]
         while to_visit:
@@ -380,12 +384,13 @@ cdef class CMap2D:
                     smallest_tentative_id = i
             current = to_visit.pop(smallest_tentative_id)
             # Iterate over 4 neighbors
-            for n in range(4):
+            for n in range(len(neighbor_offsets)):
                 # Indices for the neighbours
                 neighbor_idx = (
                     current[0] + neighbor_offsets[n][0],
                     current[1] + neighbor_offsets[n][1],
                 )
+                edge_ratio = np.sqrt(neighbor_offsets[n][0]**2 + neighbor_offsets[n][1]**2)
                 # Find which neighbors are open (exclude forbidden/explored areas of the grid)
                 if neighbor_idx[0] < 0:
                     continue
@@ -406,7 +411,7 @@ cdef class CMap2D:
                     + extra_costs[current[0], current[1]]
                 )
                 new_cost = (
-                    tentative[current[0], current[1]] + kEdgeLength + edge_extra_costs
+                    tentative[current[0], current[1]] + kEdgeLength * edge_ratio + edge_extra_costs
                 )
                 old_cost = tentative[neighbor_idx[0], neighbor_idx[1]]
                 if new_cost < old_cost or old_cost == inv_value:
