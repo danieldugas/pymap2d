@@ -28,7 +28,8 @@ gridshow(grid)
 plt.figure()
 contours = cmap2d.as_closed_obst_vertices()
 gridshow(cmap2d.occupancy())
-cmap2d.plot_contours(contours)
+contours_ij = [cmap2d.xy_to_ij(c) for c in contours]
+cmap2d.plot_contours(contours_ij)
 
 # SDF
 plt.figure()
