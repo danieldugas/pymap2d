@@ -19,10 +19,18 @@ print(ij)
 xy = cmap2d.ij_to_xy(ij.astype(np.float32))
 print(xy)
 
+# occupancy
 plt.figure() 
 grid = cmap2d.occupancy()
 gridshow(grid)
 
+# as Vertices
+plt.figure()
+contours = cmap2d.as_closed_obst_vertices()
+gridshow(cmap2d.occupancy())
+cmap2d.plot_contours(contours)
+
+# SDF
 plt.figure()
 tic = timer()
 grid = cmap2d.as_sdf()
@@ -31,6 +39,7 @@ toc = timer()
 print("SDF: {} ms".format((toc-tic)*0.001))
 gridshow(grid)
 
+# TSDF
 plt.figure()
 tic = timer()
 grid = cmap2d.as_tsdf(0.5)
@@ -38,6 +47,7 @@ toc = timer()
 print("TSDF : {} ms".format((toc-tic)*0.001))
 gridshow(grid)
 
+# Dijkstra
 plt.figure()
 tic = timer()
 ij = coarse.xy_to_ij(np.array([[0, 0]], dtype=np.float32))

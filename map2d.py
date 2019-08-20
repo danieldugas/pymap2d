@@ -525,6 +525,16 @@ class Map2D(object):
             open_, not_in_to_visit, kEdgeLength, extra_costs, tentative, goal_ij
         )
 
+    def as_closed_obst_vertices(self):
+        # convert map into clusters
+        # 
+        import cv2
+        im = cv2.imread('test.jpg')
+        imgray = cv2.cvtColor(im,cv2.COLOR_BGR2GRAY)
+        ret,thresh = cv2.threshold(imgray,127,255,0)
+        image, contours, hierarchy = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+        pass
+
     def render_agents_in_lidar(self, ranges, angles, agents, lidar_ij):
         """ Takes a list of agents (shapes + position) and renders them into the occupancy grid """
         centers_i = [0]
