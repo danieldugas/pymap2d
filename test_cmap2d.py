@@ -1,3 +1,4 @@
+from __future__ import print_function
 import CMap2D
 import numpy as np
 import matplotlib.pyplot as plt
@@ -24,13 +25,6 @@ plt.figure()
 grid = cmap2d.occupancy()
 gridshow(grid)
 
-# as Vertices
-plt.figure()
-contours = cmap2d.as_closed_obst_vertices()
-gridshow(cmap2d.occupancy())
-contours_ij = [cmap2d.xy_to_ij(c) for c in contours]
-cmap2d.plot_contours(contours_ij)
-
 # SDF
 plt.figure()
 tic = timer()
@@ -52,8 +46,21 @@ gridshow(grid)
 plt.figure()
 tic = timer()
 ij = coarse.xy_to_ij(np.array([[0, 0]], dtype=np.float32))
-grid = coarse.dijkstra(ij[0], inv_value=-1)
+grid = coarse.fastdijkstra(ij[0], inv_value=-1)
 toc = timer()
 print("Dijsktra : {} ms".format((toc-tic)*0.001))
 gridshow(grid)
+
+# Contours as Vertices
+tic = timer()
+contours = cmap2d.as_closed_obst_vertices()
+toc=timer()
+print("Contours: {} ms".format((toc-tic)*0.001))
+print("plotting contours... ")
+plt.figure()
+gridshow(cmap2d.occupancy())
+contours_ij = [cmap2d.xy_to_ij(c) for c in contours]
+cmap2d.plot_contours(contours_ij)
+print("done.")
+
 plt.show()
