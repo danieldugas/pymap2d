@@ -383,8 +383,8 @@ cdef class CMap2D:
             np.float32_t[:, ::1] tentative,
             np.uint8_t[:, ::1] mask,
             np.float32_t[:, ::1] extra_costs,
-            inv_value, eight_connected):
-        kEdgeLength = 1 * self.resolution_  # meters
+            np.float32_t inv_value, eight_connected):
+        cdef np.float32_t kEdgeLength = 1. * self.resolution_  # meters
         # Initialize bool arrays
         cdef np.uint8_t[:, ::1] open_ = np.ones((self.occupancy_shape0, self.occupancy_shape1), dtype=np.uint8)
         cdef np.uint8_t[:, ::1] not_in_to_visit = np.ones((self.occupancy_shape0, self.occupancy_shape1), dtype=np.uint8)
@@ -404,61 +404,77 @@ cdef class CMap2D:
                                 [1, 1], [1, -1], [-1, 1], [-1, -1]], dtype=np.int64)
         else:
             neighbor_offsets = np.array([[0, 1], [1, 0], [0, -1], [-1, 0]], dtype=np.int64)
+        cdef np.int64_t n_neighbor_offsets = len(neighbor_offsets)
         cdef np.int64_t len_i = tentative.shape[0]
         cdef np.int64_t len_j = tentative.shape[1]
         cdef np.int64_t smallest_tentative_id
         cdef np.float32_t value
         cdef np.float32_t smallest_tentative_value
+        cdef np.int64_t node_idxi
+        cdef np.int64_t node_idxj
+        cdef np.int64_t neighbor_idxi
+        cdef np.int64_t neighbor_idxj
+        cdef np.int64_t offseti
+        cdef np.int64_t offsetj
+        cdef np.int64_t currenti
+        cdef np.int64_t currentj
+        cdef np.float32_t edge_extra_costs
+        cdef np.float32_t new_cost
+        cdef np.float32_t old_cost
+        cdef np.float32_t edge_ratio
         while to_visit:
             # Make the current node that which has the smallest tentative values
             smallest_tentative_value = tentative[to_visit[0][0], to_visit[0][1]]
             smallest_tentative_id = 0
             for i in range(len(to_visit)):
-                node_idx = to_visit[i]
-                value = tentative[node_idx[0], node_idx[1]]
+                node_idxi = to_visit[i][0]
+                node_idxj = to_visit[i][1]
+                value = tentative[node_idxi, node_idxj]
                 if value < smallest_tentative_value:
                     smallest_tentative_value = value
                     smallest_tentative_id = i
             current = to_visit.pop(smallest_tentative_id)
+            currenti = current[0]
+            currentj = current[1]
             # Iterate over 4 neighbors
-            for n in range(len(neighbor_offsets)):
+            for n in range(n_neighbor_offsets):
                 # Indices for the neighbours
-                neighbor_idx = (
-                    current[0] + neighbor_offsets[n][0],
-                    current[1] + neighbor_offsets[n][1],
-                )
-                edge_ratio = np.sqrt(neighbor_offsets[n][0]**2 + neighbor_offsets[n][1]**2)
+                offseti = neighbor_offsets[n, 0]
+                offsetj = neighbor_offsets[n, 1]
+                neighbor_idxi = currenti + offseti
+                neighbor_idxj = currentj + offsetj
+                edge_ratio = csqrt(offseti**2 + offsetj**2)
                 # Find which neighbors are open (exclude forbidden/explored areas of the grid)
-                if neighbor_idx[0] < 0:
+                if neighbor_idxi < 0:
                     continue
-                if neighbor_idx[0] >= len_i:
+                if neighbor_idxi >= len_i:
                     continue
-                if neighbor_idx[1] < 0:
+                if neighbor_idxj < 0:
                     continue
-                if neighbor_idx[1] >= len_j:
+                if neighbor_idxj >= len_j:
                     continue
-                if not open_[neighbor_idx[0], neighbor_idx[1]]:
+                if not open_[neighbor_idxi, neighbor_idxj]:
                     continue
                 # costly regions are expensive to navigate through (costlier edges)
                 # these extra costs have to be reciprocal in order for dijkstra to function
                 # cost(a to b) == cost(b to a), hence the average between the node penalty values.
                 # Find which neighbors are open (exclude forbidden/explored areas of the grid)
                 edge_extra_costs = 0.5 * (
-                    extra_costs[neighbor_idx[0], neighbor_idx[1]]
-                    + extra_costs[current[0], current[1]]
+                    extra_costs[neighbor_idxi, neighbor_idxj]
+                    + extra_costs[currenti, currentj]
                 )
                 new_cost = (
-                    tentative[current[0], current[1]] + kEdgeLength * edge_ratio + edge_extra_costs
+                    tentative[currenti, currentj] + kEdgeLength * edge_ratio + edge_extra_costs
                 )
-                old_cost = tentative[neighbor_idx[0], neighbor_idx[1]]
+                old_cost = tentative[neighbor_idxi, neighbor_idxj]
                 if new_cost < old_cost or old_cost == inv_value:
-                    tentative[neighbor_idx[0], neighbor_idx[1]] = new_cost
+                    tentative[neighbor_idxi, neighbor_idxj] = new_cost
                 # Add neighbors to to_visit if not already present
-                if not_in_to_visit[neighbor_idx[0], neighbor_idx[1]]:
-                    to_visit.append(neighbor_idx)
-                    not_in_to_visit[neighbor_idx[0], neighbor_idx[1]] = 0
+                if not_in_to_visit[neighbor_idxi, neighbor_idxj]:
+                    to_visit.append((neighbor_idxi, neighbor_idxj))
+                    not_in_to_visit[neighbor_idxi, neighbor_idxj] = 0
             # Close the current node
-            open_[current[0], current[1]] = 0
+            open_[currenti, currentj] = 0
         return tentative
 
     def dijkstra(self, goal_ij, mask=None, extra_costs=None, inv_value=None, eight_connected=True):
