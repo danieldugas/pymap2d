@@ -83,13 +83,24 @@ cdef class CMap2D:
         returns list of obstacles, for each obstacle a list of xy vertices constituing its contour
         based on the opencv2 findContours function
         """
+
+        cont = self.as_closed_obst_vertices_ij()
+        # switch i j
+        contours = [self.ij_to_xy(c) for c in cont]
+        return contours
+
+    def as_closed_obst_vertices_ij(self):
+        """ Converts map into list of contours of obstacles, in ij
+        returns list of obstacles, for each obstacle a list of ij vertices constituing its contour
+        based on the opencv2 findContours function
+        """
         import cv2
         gray = self.occupancy()
         ret, thresh = cv2.threshold(gray, self.thresh_occupied(), 1, cv2.THRESH_BINARY)
         thresh = thresh.astype(np.uint8)
         cont, hier = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-        # switch i j, and remove extra dim
-        contours = [self.ij_to_xy(np.vstack([c[:,0,1], c[:,0,0]]).T) for c in cont]
+        # remove extra dim
+        contours = [np.vstack([c[:,0,1], c[:,0,0]]).T for c in cont]
         return contours
 
     def plot_contours(self, contours):
