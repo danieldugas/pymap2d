@@ -1134,3 +1134,83 @@ def inverse_pose2d(pose2d):
     return np.array([inv_xy[0], inv_xy[1], inv_th])
 
 
+def path_from_dijkstra_field(costmap, first, EIGHT_CONNECTED=True):
+    """ returns a path in ij coordinates based on a costmap and an initial position """
+    return cpath_from_dijkstra_field(costmap,
+            np.array(first).astype(np.int64),
+            EIGHT_CONNECTED=EIGHT_CONNECTED)
+
+cdef cpath_from_dijkstra_field(np.float32_t[:,::1] costmap, np.int64_t[::1] first, EIGHT_CONNECTED=True):
+    # 8 connected
+    # Neighbor offsets
+    cdef np.int64_t[:,::1] offsets
+    if EIGHT_CONNECTED:
+        offsets = np.array([
+                            [ 1, 0],
+                            [-1, 0],
+                            [ 0, 1],
+                            [ 0,-1],
+                            [ 1, 1],
+                            [-1, 1],
+                            [ 1,-1],
+                            [-1,-1]]).astype(np.int64)
+    else:
+        offsets = np.array([
+                            [ 1, 0],
+                            [-1, 0],
+                            [ 0, 1],
+                            [ 0,-1]]).astype(np.int64)
+    # Init
+    path = []
+    jump_log = []
+    path.append([first[0], first[1]])
+    cdef np.int64_t n_offsets = len(offsets)
+    cdef np.int64_t maxi = costmap.shape[0]
+    cdef np.int64_t maxj = costmap.shape[1]
+    cdef np.int64_t current_idxi = first[0]
+    cdef np.int64_t current_idxj = first[1]
+    cdef np.float32_t current_cost
+    cdef np.int64_t offset_idxi
+    cdef np.int64_t offset_idxj
+    cdef np.float32_t[::1] offset_edge_costs = np.zeros((n_offsets,), dtype=np.float32)
+    cdef np.float32_t offset_edge_cost
+    cdef np.float32_t best_offset_edge_cost
+    cdef np.int64_t n_best_edges
+    cdef np.int64_t[::1] tied_firstplace_candidates = np.zeros((n_offsets,), dtype=np.int64)
+    cdef np.int64_t stochastic_candidate_pick
+    # Path in global lowres map ij frame
+    while True:
+        current_cost = costmap[current_idxi, current_idxj]
+        # lookup all edge costs and find lowest cost which is also < 0
+        best_offset_edge_cost = 0
+        for n in range(n_offsets):
+            offset_idxi = current_idxi + offsets[n, 0]
+            offset_idxj = current_idxj + offsets[n, 1]
+            if offset_idxi < 0 or offset_idxi >= maxi or offset_idxj < 0 or offset_idxj >= maxj:
+                offset_edge_cost = 0
+            else:
+                offset_edge_cost = costmap[offset_idxi, offset_idxj] - current_cost
+            offset_edge_costs[n] = offset_edge_cost
+            if offset_edge_cost < best_offset_edge_cost:
+                best_offset_edge_cost = offset_edge_cost
+        # find how many choice are tied for best cost, if several, sample stochastically
+        n_best_edges = 0
+        if best_offset_edge_cost >= 0:
+            # local minima reached, terminate
+            jump_log.append(n_best_edges)
+            break
+        for n in range(n_offsets):
+            if offset_edge_costs[n] == best_offset_edge_cost:
+                tied_firstplace_candidates[n_best_edges] = n
+                n_best_edges += 1
+        if n_best_edges > 1:
+            # probabilistic jump (pick between best candidates)
+            stochastic_candidate_pick = np.random.randint(n_best_edges, dtype=np.int64)
+            selected_offset_id = tied_firstplace_candidates[stochastic_candidate_pick]
+        elif n_best_edges == 1:
+            selected_offset_id = tied_firstplace_candidates[0]
+        jump_log.append(n_best_edges)
+        current_idxi = current_idxi + offsets[selected_offset_id, 0]
+        current_idxj = current_idxj + offsets[selected_offset_id, 1]
+        path.append([current_idxi, current_idxj])
+    return np.array(path), np.array(jump_log)

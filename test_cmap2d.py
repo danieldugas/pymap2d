@@ -16,9 +16,7 @@ def gridshow(*args, **kwargs):
 cmap2d = CMap2D.CMap2D(".", "office_full")
 coarse = cmap2d.as_coarse_map2d().as_coarse_map2d().as_coarse_map2d()
 ij = cmap2d.xy_to_ij(np.array([[0, 0], [1,1]], dtype=np.float32))
-print(ij)
 xy = cmap2d.ij_to_xy(ij.astype(np.float32))
-print(xy)
 
 # occupancy
 plt.figure() 
@@ -50,6 +48,13 @@ grid = coarse.fastdijkstra(ij[0], inv_value=-1)
 toc = timer()
 print("Dijsktra : {} ms".format((toc-tic)*0.001))
 gridshow(grid)
+
+grid = coarse.fastdijkstra(ij[0], inv_value=1000)
+tic = timer()
+path, jumps = CMap2D.path_from_dijkstra_field(grid, [50, 80])
+toc = timer()
+print("Dijkstra descent : {} ms".format((toc-tic)*0.001))
+plt.plot(path[:,0], path[:,1], '-,r')
 
 # Contours as Vertices
 tic = timer()
