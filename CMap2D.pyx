@@ -103,10 +103,18 @@ cdef class CMap2D:
         contours = [np.vstack([c[:,0,1], c[:,0,0]]).T for c in cont]
         return contours
 
-    def plot_contours(self, contours):
+    def plot_contours(self, *args, **kwargs):
         from matplotlib import pyplot as plt
+        if not args:
+            raise ValueError("args empty. contours must be supplied as first argument.")
+        if len(args) == 1:
+            args.append('-,')
+        contours = args[0]
+        args = args[1:]
         for c in contours:
-            plt.plot(c[:,0], c[:,1], '-,')
+            # add the first vertice at the end to close the plotted contour
+            cplus = np.concatenate((c, c[:1, :]), axis=0)
+            plt.plot(cplus[:,0], cplus[:,1], *args, **kwargs)
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -378,8 +386,6 @@ cdef class CMap2D:
         Nodes are cells in a 2d grid
         Assumes edge costs are xy distance between two nodes
 
-        Note: 16 and above connectedness allows tiles to be jumped (no local obstruction check)
-        adjust obstacle inflation accordingly
         """
         # Mask (close) unattainable nodes
         if mask is None:
@@ -424,7 +430,7 @@ cdef class CMap2D:
         cdef np.int64_t[:, ::1] neighbor_offsets
         if connectedness == 32:
             neighbor_offsets = np.array([
-                [ 1, 0], [-1, 0], [ 0, 1], [ 0,-1],
+                [ 0, 1], [ 1, 0], [ 0,-1], [-1, 0], # first row must be up right down left
                 [ 1, 1], [-1, 1], [ 1,-1], [-1,-1],
                 [ 2, 1], [ 2,-1], [-2, 1], [-2,-1],
                 [ 1, 2], [-1, 2], [ 1,-2], [-1,-2],
@@ -434,17 +440,17 @@ cdef class CMap2D:
                 [ 2, 3], [-2, 3], [ 2,-3], [-2,-3]], dtype=np.int64)
         elif connectedness==16:
             neighbor_offsets = np.array([
-                [0, 1], [ 1, 0], [ 0,-1], [-1, 0],
+                [0, 1], [ 1, 0], [ 0,-1], [-1, 0], # first row must be up right down left
                 [1, 1], [ 1,-1], [-1, 1], [-1,-1],
                 [2, 1], [ 2,-1], [-2, 1], [-2,-1],
                 [1, 2], [-1, 2], [ 1,-2], [-1,-2]], dtype=np.int64)
         elif connectedness==8:
             neighbor_offsets = np.array([
-                [0, 1], [1, 0], [ 0,-1], [-1, 0],
+                [0, 1], [1, 0], [ 0,-1], [-1, 0], # first row must be up right down left
                 [1, 1], [1,-1], [-1, 1], [-1,-1]], dtype=np.int64)
         elif connectedness==4:
             neighbor_offsets = np.array([
-                [0, 1], [1, 0], [0, -1], [-1, 0]], dtype=np.int64)
+                [0, 1], [1, 0], [0, -1], [-1, 0]], dtype=np.int64) # first row must be up right down left
         else:
             raise ValueError("invalid value {} for connectedness passed as argument".format(connectedness))
         cdef np.int64_t n_neighbor_offsets = len(neighbor_offsets)
@@ -465,6 +471,7 @@ cdef class CMap2D:
         cdef np.float32_t new_cost
         cdef np.float32_t old_cost
         cdef np.float32_t edge_ratio
+        cdef np.uint8_t[::1] blocked = np.zeros((4), dtype=np.uint8)
         while not priority_queue.empty():
             # Pop the node with the smallest tentative value from the to_visit list
             while not priority_queue.empty():
@@ -484,6 +491,16 @@ cdef class CMap2D:
                 offsetj = neighbor_offsets[n, 1]
                 neighbor_idxi = currenti + offseti
                 neighbor_idxj = currentj + offsetj
+                # check whether path is obstructed (16/32 connectedness)
+                if n < 4:
+                    blocked[n] = mask[neighbor_idxi, neighbor_idxj]
+                else:
+                    # assumes first row of offsets is up right down left (CAREFUL!)
+                    if (offseti > 0 and blocked[1]) or \
+                       (offseti < 0 and blocked[3]) or \
+                       (offsetj > 0 and blocked[0]) or \
+                       (offsetj < 0 and blocked[2]):
+                           continue
                 edge_ratio = csqrt(offseti**2 + offsetj**2)
                 # Find which neighbors are open (exclude forbidden/explored areas of the grid)
                 if neighbor_idxi < 0:
