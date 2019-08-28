@@ -108,7 +108,7 @@ cdef class CMap2D:
         if not args:
             raise ValueError("args empty. contours must be supplied as first argument.")
         if len(args) == 1:
-            args.append('-,')
+            args = args + ('-,',)
         contours = args[0]
         args = args[1:]
         for c in contours:
@@ -433,14 +433,14 @@ cdef class CMap2D:
         cdef np.int64_t[:, ::1] neighbor_offsets
         if connectedness == 32:
             neighbor_offsets = np.array([
-                [ 0, 1], [ 1, 0], [ 0,-1], [-1, 0], # first row must be up right down left
-                [ 1, 1], [-1, 1], [ 1,-1], [-1,-1],
-                [ 2, 1], [ 2,-1], [-2, 1], [-2,-1],
-                [ 1, 2], [-1, 2], [ 1,-2], [-1,-2],
-                [ 3, 1], [ 3,-1], [-3, 1], [-3,-1],
-                [ 1, 3], [-1, 3], [ 1,-3], [-1,-3],
-                [ 3, 2], [ 3,-2], [-3, 2], [-3,-2],
-                [ 2, 3], [-2, 3], [ 2,-3], [-2,-3]], dtype=np.int64)
+                [0, 1], [ 1, 0], [ 0,-1], [-1, 0], # first row must be up right down left
+                [1, 1], [ 1,-1], [-1, 1], [-1,-1],
+                [2, 1], [ 2,-1], [-2, 1], [-2,-1],
+                [1, 2], [-1, 2], [ 1,-2], [-1,-2],
+                [3, 1], [ 3,-1], [-3, 1], [-3,-1],
+                [1, 3], [-1, 3], [ 1,-3], [-1,-3],
+                [3, 2], [ 3,-2], [-3, 2], [-3,-2],
+                [2, 3], [-2, 3], [ 2,-3], [-2,-3]], dtype=np.int64)
         elif connectedness==16:
             neighbor_offsets = np.array([
                 [0, 1], [ 1, 0], [ 0,-1], [-1, 0], # first row must be up right down left
@@ -495,7 +495,7 @@ cdef class CMap2D:
                 neighbor_idxi = currenti + offseti
                 neighbor_idxj = currentj + offsetj
                 edge_ratio = csqrt(offseti**2 + offsetj**2)
-                # Find which neighbors are open (exclude forbidden/explored areas of the grid)
+                # exclude forbidden/explored areas of the grid
                 if neighbor_idxi < 0:
                     continue
                 if neighbor_idxi >= len_i:
@@ -504,18 +504,20 @@ cdef class CMap2D:
                     continue
                 if neighbor_idxj >= len_j:
                     continue
-                if not open_[neighbor_idxi, neighbor_idxj]:
-                    continue
-                # check whether path is obstructed (16/32 connectedness)
+                # check whether path is obstructed (for 16/32 connectedness)
                 if n < 4:
                     blocked[n] = mask[neighbor_idxi, neighbor_idxj]
+                # Exclude obstructed jumps (for 16/32 connectedness)
                 else:
-                    # assumes first row of offsets is up right down left (CAREFUL!)
+                    # assumes first row of offsets is up right down left (see offset init!)
                     if (offseti > 0 and blocked[1]) or \
                        (offseti < 0 and blocked[3]) or \
                        (offsetj > 0 and blocked[0]) or \
                        (offsetj < 0 and blocked[2]):
                            continue
+                # Exclude invalid neighbors
+                if not open_[neighbor_idxi, neighbor_idxj]:
+                    continue
                 # costly regions are expensive to navigate through (costlier edges)
                 # these extra costs have to be reciprocal in order for dijkstra to function
                 # cost(a to b) == cost(b to a), hence the average between the node penalty values.

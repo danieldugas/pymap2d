@@ -8,8 +8,6 @@ from map2d import gridshow
 
 cmap2d = CMap2D.CMap2D(".", "office_full")
 coarse = cmap2d.as_coarse_map2d().as_coarse_map2d().as_coarse_map2d()
-ij = cmap2d.xy_to_ij(np.array([[0, 0], [1,1]], dtype=np.float32))
-xy = cmap2d.ij_to_xy(ij.astype(np.float32))
 
 # occupancy
 plt.figure() 
