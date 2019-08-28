@@ -372,7 +372,7 @@ cdef class CMap2D:
         return coarse
 
 
-    def fastdijkstra(self, goal_ij, mask=None, extra_costs=None, inv_value=None, eight_connected=True):
+    def fastdijkstra(self, goal_ij, mask=None, extra_costs=None, inv_value=None, connectedness=8):
         # Mask (close) unattainable nodes
         if mask is None:
             mask = (self.occupancy() >= self.thresh_free).astype(np.uint8)
@@ -383,7 +383,7 @@ cdef class CMap2D:
         if inv_value is None:
             inv_value = self.HUGE_
         result = np.ones_like(self.occupancy(), dtype=np.float32) * inv_value
-        self.cdijkstra(goal_ij, result, mask, extra_costs, inv_value, eight_connected)
+        self.cdijkstra(goal_ij, result, mask, extra_costs, inv_value, connectedness)
         return result
 
     @cython.boundscheck(False)
@@ -394,7 +394,7 @@ cdef class CMap2D:
             np.float32_t[:, ::1] tentative,
             np.uint8_t[:, ::1] mask,
             np.float32_t[:, ::1] extra_costs,
-            np.float32_t inv_value, eight_connected):
+            np.float32_t inv_value, connectedness=8):
         cdef np.float32_t kEdgeLength = 1. * self.resolution_  # meters
         # Initialize bool arrays
         cdef np.uint8_t[:, ::1] open_ = np.ones((self.occupancy_shape0, self.occupancy_shape1), dtype=np.uint8)
@@ -410,11 +410,31 @@ cdef class CMap2D:
         to_visit = [(goal_ij[0], goal_ij[1])]
         not_in_to_visit[goal_ij[0], goal_ij[1]] = 1
         cdef np.int64_t[:, ::1] neighbor_offsets
-        if eight_connected:
-            neighbor_offsets = np.array([[0, 1], [1, 0], [0, -1], [-1, 0],
-                                [1, 1], [1, -1], [-1, 1], [-1, -1]], dtype=np.int64)
+        if connectedness == 32:
+            neighbor_offsets = np.array([
+                [ 1, 0], [-1, 0], [ 0, 1], [ 0,-1],
+                [ 1, 1], [-1, 1], [ 1,-1], [-1,-1],
+                [ 2, 1], [ 2,-1], [-2, 1], [-2,-1],
+                [ 1, 2], [-1, 2], [ 1,-2], [-1,-2],
+                [ 3, 1], [ 3,-1], [-3, 1], [-3,-1],
+                [ 1, 3], [-1, 3], [ 1,-3], [-1,-3],
+                [ 3, 2], [ 3,-2], [-3, 2], [-3,-2],
+                [ 2, 3], [-2, 3], [ 2,-3], [-2,-3]], dtype=np.int64)
+        elif connectedness==16:
+            neighbor_offsets = np.array([
+                [0, 1], [ 1, 0], [ 0,-1], [-1, 0],
+                [1, 1], [ 1,-1], [-1, 1], [-1,-1],
+                [2, 1], [ 2,-1], [-2, 1], [-2,-1],
+                [1, 2], [-1, 2], [ 1,-2], [-1,-2]], dtype=np.int64)
+        elif connectedness==8:
+            neighbor_offsets = np.array([
+                [0, 1], [1, 0], [ 0,-1], [-1, 0],
+                [1, 1], [1,-1], [-1, 1], [-1,-1]], dtype=np.int64)
+        elif connectedness==4:
+            neighbor_offsets = np.array([
+                [0, 1], [1, 0], [0, -1], [-1, 0]], dtype=np.int64)
         else:
-            neighbor_offsets = np.array([[0, 1], [1, 0], [0, -1], [-1, 0]], dtype=np.int64)
+            raise ValueError("invalid value {} for connectedness passed as argument".format(connectedness))
         cdef np.int64_t n_neighbor_offsets = len(neighbor_offsets)
         cdef np.int64_t len_i = tentative.shape[0]
         cdef np.int64_t len_j = tentative.shape[1]
@@ -1134,32 +1154,40 @@ def inverse_pose2d(pose2d):
     return np.array([inv_xy[0], inv_xy[1], inv_th])
 
 
-def path_from_dijkstra_field(costmap, first, EIGHT_CONNECTED=True):
+def path_from_dijkstra_field(costmap, first, connectedness=8):
     """ returns a path in ij coordinates based on a costmap and an initial position """
     return cpath_from_dijkstra_field(costmap,
             np.array(first).astype(np.int64),
-            EIGHT_CONNECTED=EIGHT_CONNECTED)
+            connectedness=connectedness)
 
-cdef cpath_from_dijkstra_field(np.float32_t[:,::1] costmap, np.int64_t[::1] first, EIGHT_CONNECTED=True):
+cdef cpath_from_dijkstra_field(np.float32_t[:,::1] costmap, np.int64_t[::1] first, connectedness=8):
     # 8 connected
     # Neighbor offsets
     cdef np.int64_t[:,::1] offsets
-    if EIGHT_CONNECTED:
+    if connectedness == 32:
         offsets = np.array([
-                            [ 1, 0],
-                            [-1, 0],
-                            [ 0, 1],
-                            [ 0,-1],
-                            [ 1, 1],
-                            [-1, 1],
-                            [ 1,-1],
-                            [-1,-1]]).astype(np.int64)
+                            [ 1, 0], [-1, 0], [ 0, 1], [ 0,-1],
+                            [ 1, 1], [-1, 1], [ 1,-1], [-1,-1],
+                            [ 2, 1], [ 2,-1], [-2, 1], [-2,-1],
+                            [ 1, 2], [-1, 2], [ 1,-2], [-1,-2],
+                            [ 3, 1], [ 3,-1], [-3, 1], [-3,-1],
+                            [ 1, 3], [-1, 3], [ 1,-3], [-1,-3],
+                            [ 3, 2], [ 3,-2], [-3, 2], [-3,-2],
+                            [ 2, 3], [-2, 3], [ 2,-3], [-2,-3]]).astype(np.int64)
+    elif connectedness == 16:
+        offsets = np.array([
+                            [ 1, 0], [-1, 0], [ 0, 1], [ 0,-1],
+                            [ 1, 1], [-1, 1], [ 1,-1], [-1,-1],
+                            [ 2, 1], [ 2,-1], [-2, 1], [-2,-1],
+                            [ 1, 2], [-1, 2], [ 1,-2], [-1,-2]]).astype(np.int64)
+    elif connectedness == 8:
+        offsets = np.array([
+                            [ 1, 0], [-1, 0], [ 0, 1], [ 0,-1],
+                            [ 1, 1], [-1, 1], [ 1,-1], [-1,-1]]).astype(np.int64)
+    elif connectedness == 4:
+        offsets = np.array([[ 1, 0], [-1, 0], [ 0, 1], [ 0,-1]]).astype(np.int64)
     else:
-        offsets = np.array([
-                            [ 1, 0],
-                            [-1, 0],
-                            [ 0, 1],
-                            [ 0,-1]]).astype(np.int64)
+        raise ValueError("invalid value {} for connectedness passed as argument".format(connectedness))
     # Init
     path = []
     jump_log = []
@@ -1172,6 +1200,9 @@ cdef cpath_from_dijkstra_field(np.float32_t[:,::1] costmap, np.int64_t[::1] firs
     cdef np.float32_t current_cost
     cdef np.int64_t offset_idxi
     cdef np.int64_t offset_idxj
+    cdef np.int64_t oi
+    cdef np.int64_t oj
+    cdef np.float32_t olen
     cdef np.float32_t[::1] offset_edge_costs = np.zeros((n_offsets,), dtype=np.float32)
     cdef np.float32_t offset_edge_cost
     cdef np.float32_t best_offset_edge_cost
@@ -1184,12 +1215,18 @@ cdef cpath_from_dijkstra_field(np.float32_t[:,::1] costmap, np.int64_t[::1] firs
         # lookup all edge costs and find lowest cost which is also < 0
         best_offset_edge_cost = 0
         for n in range(n_offsets):
-            offset_idxi = current_idxi + offsets[n, 0]
-            offset_idxj = current_idxj + offsets[n, 1]
+            oi = offsets[n, 0]
+            oj = offsets[n, 1]
+            offset_idxi = current_idxi + oi
+            offset_idxj = current_idxj + oj
             if offset_idxi < 0 or offset_idxi >= maxi or offset_idxj < 0 or offset_idxj >= maxj:
                 offset_edge_cost = 0
             else:
                 offset_edge_cost = costmap[offset_idxi, offset_idxj] - current_cost
+            # in 8/16 connectedness some offsets are 'longer' and will be preferred unless normalized
+            olen = csqrt(oi*oi + oj*oj)
+            offset_edge_cost = offset_edge_cost / olen
+            # store for later
             offset_edge_costs[n] = offset_edge_cost
             if offset_edge_cost < best_offset_edge_cost:
                 best_offset_edge_cost = offset_edge_cost
