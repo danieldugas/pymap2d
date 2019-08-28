@@ -1,8 +1,8 @@
 # distutils: language=c++
 
 from libcpp cimport bool
-from libcpp.string cimport string
-from libcpp.vector cimport vector
+from libcpp.queue cimport priority_queue as cpp_priority_queue
+from libcpp.pair cimport pair as cpp_pair
 import numpy as np
 cimport numpy as np
 from cython.operator cimport dereference as deref
@@ -375,6 +375,9 @@ cdef class CMap2D:
     def dijkstra(self, goal_ij, mask=None, extra_costs=None, inv_value=None, connectedness=8):
         """ 4, 8, 16, or 32 connected dijkstra 
 
+        Nodes are cells in a 2d grid
+        Assumes edge costs are xy distance between two nodes
+
         Note: 16 and above connectedness allows tiles to be jumped (no local obstruction check)
         adjust obstacle inflation accordingly
         """
@@ -403,7 +406,6 @@ cdef class CMap2D:
         cdef np.float32_t kEdgeLength = 1. * self.resolution_  # meters
         # Initialize bool arrays
         cdef np.uint8_t[:, ::1] open_ = np.ones((self.occupancy_shape0, self.occupancy_shape1), dtype=np.uint8)
-        cdef np.uint8_t[:, ::1] not_in_to_visit = np.ones((self.occupancy_shape0, self.occupancy_shape1), dtype=np.uint8)
         # Mask (close) unattainable nodes
         for i in range(self.occupancy_shape0):
             for j in range(self.occupancy_shape1):
@@ -412,8 +414,13 @@ cdef class CMap2D:
         result = (np.ones((self.occupancy_shape0, self.occupancy_shape1)) * inv_value).astype(np.float32)
         # Start at the goal location
         tentative[goal_ij[0], goal_ij[1]] = 0
-        to_visit = [(goal_ij[0], goal_ij[1])]
-        not_in_to_visit[goal_ij[0], goal_ij[1]] = 1
+        cdef cpp_priority_queue[cpp_pair[np.float32_t, cpp_pair[np.int64_t, np.int64_t]]] priority_queue
+        priority_queue.push(
+                cpp_pair[np.float32_t, cpp_pair[np.int64_t, np.int64_t]](0, cpp_pair[np.int64_t, np.int64_t](goal_ij[0], goal_ij[1]))
+                )
+        cdef cpp_pair[np.float32_t, cpp_pair[np.int64_t, np.int64_t]] popped
+        cdef np.int64_t popped_idxi
+        cdef np.int64_t popped_idxj
         cdef np.int64_t[:, ::1] neighbor_offsets
         if connectedness == 32:
             neighbor_offsets = np.array([
@@ -458,21 +465,19 @@ cdef class CMap2D:
         cdef np.float32_t new_cost
         cdef np.float32_t old_cost
         cdef np.float32_t edge_ratio
-        while to_visit:
-            # Make the current node that which has the smallest tentative values
-            smallest_tentative_value = tentative[to_visit[0][0], to_visit[0][1]]
-            smallest_tentative_id = 0
-            for i in range(len(to_visit)):
-                node_idxi = to_visit[i][0]
-                node_idxj = to_visit[i][1]
-                value = tentative[node_idxi, node_idxj]
-                if value < smallest_tentative_value:
-                    smallest_tentative_value = value
-                    smallest_tentative_id = i
-            current = to_visit.pop(smallest_tentative_id)
-            currenti = current[0]
-            currentj = current[1]
-            # Iterate over 4 neighbors
+        while not priority_queue.empty():
+            # Pop the node with the smallest tentative value from the to_visit list
+            while not priority_queue.empty():
+                popped = priority_queue.top()
+                priority_queue.pop()
+                popped_idxi = popped.second.first
+                popped_idxj = popped.second.second
+                # skip nodes which are already closed (stagnant duplicates in the heap)
+                if open_[popped_idxi, popped_idxj] == 1:
+                    currenti = popped_idxi
+                    currentj = popped_idxj
+                    break
+            # Iterate over neighbors
             for n in range(n_neighbor_offsets):
                 # Indices for the neighbours
                 offseti = neighbor_offsets[n, 0]
@@ -505,10 +510,11 @@ cdef class CMap2D:
                 old_cost = tentative[neighbor_idxi, neighbor_idxj]
                 if new_cost < old_cost or old_cost == inv_value:
                     tentative[neighbor_idxi, neighbor_idxj] = new_cost
-                # Add neighbors to to_visit if not already present
-                if not_in_to_visit[neighbor_idxi, neighbor_idxj]:
-                    to_visit.append((neighbor_idxi, neighbor_idxj))
-                    not_in_to_visit[neighbor_idxi, neighbor_idxj] = 0
+                    # Add neighbor to priority queue
+                    priority_queue.push(
+                            cpp_pair[np.float32_t, cpp_pair[np.int64_t, np.int64_t]](
+                                -new_cost, cpp_pair[np.int64_t, np.int64_t](neighbor_idxi, neighbor_idxj))
+                            )
             # Close the current node
             open_[currenti, currentj] = 0
         return tentative
