@@ -27,7 +27,7 @@ cdef class CMap2D:
     cdef float thresh_free
     cdef float HUGE_
     cdef public np.float32_t[:] origin
-    def __init__(self, folder=None, name=None):
+    def __init__(self, folder=None, name=None, silent=False):
         self.occupancy_ = np.ones((100, 100), dtype=np.float32) * 0.5
         self.occupancy_shape0 = 100
         self.occupancy_shape1 = 100
@@ -41,11 +41,13 @@ cdef class CMap2D:
         # Load map from file
         folder = os.path.expanduser(folder)
         yaml_file = os.path.join(folder, name + ".yaml")
-        print("Loading map definition from {}".format(yaml_file))
+        if not silent:
+            print("Loading map definition from {}".format(yaml_file))
         with open(yaml_file) as stream:
             mapparams = load(stream)
         map_file = os.path.join(folder, mapparams["image"])
-        print("Map definition found. Loading map from {}".format(map_file))
+        if not silent:
+            print("Map definition found. Loading map from {}".format(map_file))
         mapimage = imread(map_file)
         temp = (1. - mapimage.T[:, ::-1] / 254.).astype(np.float32)
               # (0 to 1) 1 means 100% certain occupied
@@ -354,7 +356,10 @@ cdef class CMap2D:
         min_distances[self.occupancy() > self.thresh_free] *= -1.
         return min_distances
 
-    cpdef as_coarse_map2d(self):
+    cpdef as_coarse_map2d(self, n=1):
+        # recursion to provide a convenient way to coarsen x times
+        if n > 1:
+            return self.as_coarse_map2d(n=int(n-1)).as_coarse_map2d()
         coarse = CMap2D()
         if self.occupancy_shape0 % 2 != 0 or self.occupancy_shape1 % 2 != 0:
             raise IndexError("Shape needs to be divisible by 2 in order to make coarse map")
