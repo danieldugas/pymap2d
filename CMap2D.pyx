@@ -334,7 +334,7 @@ cdef class CMap2D:
             return self.is_inside_ij(*np.split(np.array(i), 2, axis=-1))[..., 0]
         return reduce(
             np.logical_and,
-            [i > 0, i < self.occupancy_.shape[0], j > 0, j < self.occupancy_.shape[1]],
+            [i >= 0, i < self.occupancy_.shape[0], j >= 0, j < self.occupancy_.shape[1]],
         )
 
     def occupancy(self):
@@ -397,6 +397,9 @@ cdef class CMap2D:
         if inv_value is None:
             inv_value = self.HUGE_
         result = np.ones_like(self.occupancy(), dtype=np.float32) * inv_value
+        if not self.is_inside_ij(goal_ij[0], goal_ij[1]):
+            raise ValueError("Goal ij ({}, {}) not inside map of size ({}, {})".format(
+                goal_ij[0], goal_ij[1], self.occupancy_shape0, self.occupancy_shape1))
         self.cdijkstra(goal_ij, result, mask, extra_costs, inv_value, connectedness)
         return result
 
@@ -465,8 +468,8 @@ cdef class CMap2D:
         cdef np.int64_t neighbor_idxj
         cdef np.int64_t offseti
         cdef np.int64_t offsetj
-        cdef np.int64_t currenti
-        cdef np.int64_t currentj
+        cdef np.int64_t currenti = goal_ij[0]
+        cdef np.int64_t currentj = goal_ij[1]
         cdef np.float32_t edge_extra_costs
         cdef np.float32_t new_cost
         cdef np.float32_t old_cost
@@ -491,16 +494,6 @@ cdef class CMap2D:
                 offsetj = neighbor_offsets[n, 1]
                 neighbor_idxi = currenti + offseti
                 neighbor_idxj = currentj + offsetj
-                # check whether path is obstructed (16/32 connectedness)
-                if n < 4:
-                    blocked[n] = mask[neighbor_idxi, neighbor_idxj]
-                else:
-                    # assumes first row of offsets is up right down left (CAREFUL!)
-                    if (offseti > 0 and blocked[1]) or \
-                       (offseti < 0 and blocked[3]) or \
-                       (offsetj > 0 and blocked[0]) or \
-                       (offsetj < 0 and blocked[2]):
-                           continue
                 edge_ratio = csqrt(offseti**2 + offsetj**2)
                 # Find which neighbors are open (exclude forbidden/explored areas of the grid)
                 if neighbor_idxi < 0:
@@ -513,6 +506,16 @@ cdef class CMap2D:
                     continue
                 if not open_[neighbor_idxi, neighbor_idxj]:
                     continue
+                # check whether path is obstructed (16/32 connectedness)
+                if n < 4:
+                    blocked[n] = mask[neighbor_idxi, neighbor_idxj]
+                else:
+                    # assumes first row of offsets is up right down left (CAREFUL!)
+                    if (offseti > 0 and blocked[1]) or \
+                       (offseti < 0 and blocked[3]) or \
+                       (offsetj > 0 and blocked[0]) or \
+                       (offsetj < 0 and blocked[2]):
+                           continue
                 # costly regions are expensive to navigate through (costlier edges)
                 # these extra costs have to be reciprocal in order for dijkstra to function
                 # cost(a to b) == cost(b to a), hence the average between the node penalty values.
