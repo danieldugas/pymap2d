@@ -150,12 +150,23 @@ cdef class CMap2D:
                         smallest_dist = norm
                 min_distances[i, j] = smallest_dist
 
-    def distance_transform_2d(self):
-        f = np.zeros_like(self.occupancy(), dtype=np.float32)
-        f[self.occupancy() <= self.thresh_occupied()] = np.inf
-        D = np.ones_like(self.occupancy(), dtype=np.float32) * np.inf
+    def distance_transform_2d(self, f):
+        """ smears lower bound of f according to square distance """
+        if not f.dtype == np.float32:
+            raise ValueError
+        D = np.ones_like(f, dtype=np.float32) * np.inf
         cdistance_transform_2d(f, D)
-        return np.sqrt(D)*self.resolution()
+        return D
+
+    def obstructed_distance_transform_2d(self, f, ob):
+        """ smears lower bound of f according to square distance, with obstructions """
+        if not f.dtype == np.float32:
+            raise ValueError
+        if not ob.dtype == np.uint8:
+            raise ValueError
+        D = np.ones_like(self.occupancy(), dtype=np.float32) * np.inf
+        cobstructed_distance_transform_2d(f, ob, D)
+        return D
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -357,7 +368,14 @@ cdef class CMap2D:
         return occ_T
 
     def as_sdf(self, raytracer=None):
-        min_distances = self.distance_transform_2d()
+        # f is zeros where occupied, inf where free
+        f = np.zeros_like(self.occupancy(), dtype=np.float32)
+        f[self.occupancy() <= self.thresh_occupied()] = np.inf
+        D = np.ones_like(self.occupancy(), dtype=np.float32) * np.inf
+        # distance transform smears lower bound with square dist enveloppe
+        cdistance_transform_2d(f, D)
+        # after the distance transform , D is square distance from closest zeros in ij coord
+        min_distances = np.sqrt(D)*self.resolution()
         # Switch sign for occupied and unkown points (*signed* distance field)
         min_distances[self.occupancy() > self.thresh_free] *= -1.
         return min_distances
@@ -1018,6 +1036,110 @@ cdef cas_sdf(self, np.int64_t[:,::1] occupied_points_ij, np.float32_t[:, ::1] mi
                     smallest_dist = norm
             min_distances[i, j] = smallest_dist
 
+cdef cobstructed_distance_transform_1d(np.float32_t[::1] f, np.uint8_t[::1] ob, np.float32_t[::1] D):
+    """ based on 'Distance Transforms of Sampled Functions' by Felzenswalb et al
+    Adds obstructions, to allow stopping the propagation of distance transforms at arbitrary points"""
+    if f.shape[0] != D.shape[0]:
+        raise IndexError
+    if f.shape[0] != ob.shape[0]:
+        raise IndexError
+    cdef np.float32_t[::1] z = np.ones((f.shape[0]+1), dtype=np.float32) * np.inf # z[i] intersection between lowest parabola i and lowest parabola i-1
+    cdef np.int64_t[::1] v = np.zeros((f.shape[0]), dtype=np.int64) # the positions of parabolas forming the lower envelope
+    cdef np.uint8_t[::1] vob = np.ones((f.shape[0]), dtype=np.uint8) # whether parabola k is an obstruction
+    cdef np.int64_t k  = 0 # the amount of parabolas forming the lower envelope (- 1 for indexing)
+    cdef np.int64_t max_k  = 0 # the amount of parabolas forming the lower envelope (- 1 for indexing)
+    cdef np.int64_t start = 0 
+    cdef np.int64_t vk = 0 # var for speed
+    # init
+    z[0] = -np.inf # boundary with previous
+    z[1] = np.inf # boundary with next
+    # find and add the first non-inf parabola to the lower envelope
+    for q in range(0, f.shape[0]):
+        if ob[q] == 1: # first parabola is an obstruction
+            v[0] = q
+            vob[0] = 1
+            z[0] = q
+            z[1] = q
+            break
+        if f[q] == np.inf:
+            continue
+        v[0] = q
+        z[0] = -np.inf # boundary with previous
+        z[1] = np.inf # boundary with next
+        vob[0] = 0
+        break
+    start = v[k] + 1 # start after the first non-inf parabola
+    for q in range(start, f.shape[0]):
+        if ob[q] == 1: # obstruction parabola, add to L.E and continue
+            k = k+1
+            v[k] = q
+            z[k] = q
+            z[k+1] = q
+            vob[k] = 1
+            continue
+        if f[q] == np.inf: # inf parabolas are too 'high' to affect lower envelope
+            continue
+        # compare current point q with latest parabola in the envelope
+        while True:
+            if vob[k] == 1: # latest parabola is an obstruction, q is guaranteed L.E
+                # normal situation, add this parabola to the L.E and continue
+                k = k+1
+                v[k] = q
+#                 s = z[k-1]
+#                 z[k] = s # obsolete, already set by prev parabola
+                z[k + 1] = np.inf
+                vob[k] = 0
+                break
+            vk = v[k]
+            s = ((f[q] + q*q) - (f[vk] + vk*vk)) / (2*q - 2*vk) # boundary with previous parabola
+            if s <= z[k]:
+                # the boundary between this and the previous parabola is before the boundary between the previous and its predecessor
+                # the latest parabola obsoletes the previous one, erase the previous one from the L.E
+                # continue -> compare again with the previous parabola in the envelope
+                k = k-1
+                continue
+            elif s > z[k]:
+                # normal situation, add this parabola to the L.E and continue
+                k = k+1
+                v[k] = q
+                z[k] = s
+                z[k + 1] = np.inf
+                vob[k] = 0
+                break
+    max_k = k
+    k = 0
+    for q in range(f.shape[0]):
+        print(f[q], ob[q])
+    print("-----------------------------------")
+    for q in range(f.shape[0]):
+        D[q] = np.inf
+        if ob[q] == 1: # skip obstructions
+            continue
+        # find the parabola corresponding to the current L.E section (where z[k] < q < z[k+1])
+        # move k forward until the boundary with next is later than q
+        while z[k+1] < q:
+            print(q, k, max_k, z[k], vob[k], v[k])
+            k = k+1
+        if vob[k] == 1:
+            D[q] = np.inf
+            continue
+        vk = v[k]
+        D[q] = f[vk] + (q - vk)**2
+
+cdef cobstructed_distance_transform_2d(np.float32_t[:, ::1] f, np.uint8_t[:, ::1] ob, np.float32_t[:, ::1] D):
+    cdef np.float32_t[:, ::1] f_T = np.ascontiguousarray(np.copy(f).T)
+    cdef np.uint8_t[:, ::1] ob_T = np.ascontiguousarray(np.copy(ob).T)
+    cdef np.float32_t[:, ::1] D_after_vertical_pass_T = np.ascontiguousarray(np.copy(D).T)
+    cdef np.float32_t[:, ::1] D_after_vertical_pass
+    # vertical pass
+    for j in range(f.shape[1]):
+        cobstructed_distance_transform_1d(f_T[j,:], ob_T[j,:], D_after_vertical_pass_T[j,:])
+    D_after_vertical_pass = np.ascontiguousarray(np.copy(D_after_vertical_pass_T).T)
+    # vertical pass
+    # horizontal pass
+    for i in range(f.shape[0]):
+        cobstructed_distance_transform_1d(D_after_vertical_pass[i,:], ob[i,:], D[i,:])
+
 cdef cdistance_transform_1d(np.float32_t[::1] f, np.float32_t[::1] D):
     """ based on 'Distance Transforms of Sampled Functions' by Felzenswalb et al """
     if f.shape[0] != D.shape[0]:
@@ -1042,13 +1164,16 @@ cdef cdistance_transform_1d(np.float32_t[::1] f, np.float32_t[::1] D):
     for q in range(start, f.shape[0]):
         if f[q] == np.inf: # inf parabolas are too 'high' to affect lower envelope
             continue
+        # compare current point q with latest parabola in the envelope
         while True:
             vk = v[k]
             s = ((f[q] + q*q) - (f[vk] + vk*vk)) / (2*q - 2*vk) # boundary with previous parabola
             if s <= z[k]:
                 # the boundary between this and the previous parabola is before the boundary between the previous and its predecessor
                 # the latest parabola obsoletes the previous one, erase the previous one from the L.E
+                # continue -> compare again with the previous parabola in the envelope
                 k = k-1
+                continue
             elif s > z[k]:
                 # normal situation, add this parabola to the L.E and continue
                 k = k+1
