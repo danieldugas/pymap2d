@@ -69,6 +69,12 @@ cdef class CMap2D:
         if self.resolution_ == 0:
             raise ValueError("resolution can not be 0")
 
+    def cset_resolution(self, float res):
+        self.resolution_ = res
+
+    def set_resolution(self, res):
+        self.cset_resolution(res)
+
     def resolution(self):
         res = float(self.resolution_)
         return res
