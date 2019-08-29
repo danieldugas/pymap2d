@@ -471,15 +471,15 @@ cdef class CMap2D:
         cdef np.int64_t node_idxj
         cdef np.int64_t neighbor_idxi
         cdef np.int64_t neighbor_idxj
-        cdef np.int64_t offseti
-        cdef np.int64_t offsetj
+        cdef np.int64_t oi
+        cdef np.int64_t oj
         cdef np.int64_t currenti = goal_ij[0]
         cdef np.int64_t currentj = goal_ij[1]
         cdef np.float32_t edge_extra_costs
         cdef np.float32_t new_cost
         cdef np.float32_t old_cost
         cdef np.float32_t edge_ratio
-        cdef np.uint8_t[::1] blocked = np.zeros((4), dtype=np.uint8)
+        cdef np.uint8_t[::1] blocked = np.zeros((8), dtype=np.uint8)
         while not priority_queue.empty():
             # Pop the node with the smallest tentative value from the to_visit list
             while not priority_queue.empty():
@@ -495,11 +495,11 @@ cdef class CMap2D:
             # Iterate over neighbors
             for n in range(n_neighbor_offsets):
                 # Indices for the neighbours
-                offseti = neighbor_offsets[n, 0]
-                offsetj = neighbor_offsets[n, 1]
-                neighbor_idxi = currenti + offseti
-                neighbor_idxj = currentj + offsetj
-                edge_ratio = csqrt(offseti**2 + offsetj**2)
+                oi = neighbor_offsets[n, 0]
+                oj = neighbor_offsets[n, 1]
+                neighbor_idxi = currenti + oi
+                neighbor_idxj = currentj + oj
+                edge_ratio = csqrt(oi**2 + oj**2)
                 # exclude forbidden/explored areas of the grid
                 if neighbor_idxi < 0:
                     continue
@@ -512,13 +512,22 @@ cdef class CMap2D:
                 # check whether path is obstructed (for 16/32 connectedness)
                 if n < 4:
                     blocked[n] = mask[neighbor_idxi, neighbor_idxj]
+                elif n < 8:
+                    blocked[n] = mask[neighbor_idxi, neighbor_idxj]
                 # Exclude obstructed jumps (for 16/32 connectedness)
-                else:
+                if n > 4: # for example, prevent ur if u is blocked
                     # assumes first row of offsets is up right down left (see offset init!)
-                    if (offseti > 0 and blocked[1]) or \
-                       (offseti < 0 and blocked[3]) or \
-                       (offsetj > 0 and blocked[0]) or \
-                       (offsetj < 0 and blocked[2]):
+                    if (oj > 0 and blocked[0]) or \
+                       (oi > 0 and blocked[1]) or \
+                       (oj < 0 and blocked[2]) or \
+                       (oi < 0 and blocked[3]):
+                           continue
+                if n > 8: # for example, prevent uuur if ur is blocked
+                    # assumes second row ru rd lu ld
+                    if (oi > 0 and oj > 0 and blocked[4]) or \
+                       (oi > 0 and oj < 0 and blocked[5]) or \
+                       (oi < 0 and oj > 0 and blocked[6]) or \
+                       (oi < 0 and oj < 0 and blocked[7]):
                            continue
                 # Exclude invalid neighbors
                 if not open_[neighbor_idxi, neighbor_idxj]:
@@ -1122,26 +1131,27 @@ cdef cpath_from_dijkstra_field(np.float32_t[:,::1] costmap, np.int64_t[::1] firs
     cdef np.int64_t[:,::1] offsets
     if connectedness == 32:
         offsets = np.array([
-                            [ 1, 0], [-1, 0], [ 0, 1], [ 0,-1],
-                            [ 1, 1], [-1, 1], [ 1,-1], [-1,-1],
-                            [ 2, 1], [ 2,-1], [-2, 1], [-2,-1],
-                            [ 1, 2], [-1, 2], [ 1,-2], [-1,-2],
-                            [ 3, 1], [ 3,-1], [-3, 1], [-3,-1],
-                            [ 1, 3], [-1, 3], [ 1,-3], [-1,-3],
-                            [ 3, 2], [ 3,-2], [-3, 2], [-3,-2],
-                            [ 2, 3], [-2, 3], [ 2,-3], [-2,-3]]).astype(np.int64)
-    elif connectedness == 16:
+            [0, 1], [ 1, 0], [ 0,-1], [-1, 0], # first row must be up right down left
+            [1, 1], [ 1,-1], [-1, 1], [-1,-1], # second row must be ru rd lu ld
+            [2, 1], [ 2,-1], [-2, 1], [-2,-1],
+            [1, 2], [-1, 2], [ 1,-2], [-1,-2],
+            [3, 1], [ 3,-1], [-3, 1], [-3,-1],
+            [1, 3], [-1, 3], [ 1,-3], [-1,-3],
+            [3, 2], [ 3,-2], [-3, 2], [-3,-2],
+            [2, 3], [-2, 3], [ 2,-3], [-2,-3]], dtype=np.int64)
+    elif connectedness==16:
         offsets = np.array([
-                            [ 1, 0], [-1, 0], [ 0, 1], [ 0,-1],
-                            [ 1, 1], [-1, 1], [ 1,-1], [-1,-1],
-                            [ 2, 1], [ 2,-1], [-2, 1], [-2,-1],
-                            [ 1, 2], [-1, 2], [ 1,-2], [-1,-2]]).astype(np.int64)
-    elif connectedness == 8:
+            [0, 1], [ 1, 0], [ 0,-1], [-1, 0], # first row must be up right down left
+            [1, 1], [ 1,-1], [-1, 1], [-1,-1],
+            [2, 1], [ 2,-1], [-2, 1], [-2,-1],
+            [1, 2], [-1, 2], [ 1,-2], [-1,-2]], dtype=np.int64)
+    elif connectedness==8:
         offsets = np.array([
-                            [ 1, 0], [-1, 0], [ 0, 1], [ 0,-1],
-                            [ 1, 1], [-1, 1], [ 1,-1], [-1,-1]]).astype(np.int64)
-    elif connectedness == 4:
-        offsets = np.array([[ 1, 0], [-1, 0], [ 0, 1], [ 0,-1]]).astype(np.int64)
+            [0, 1], [1, 0], [ 0,-1], [-1, 0], # first row must be up right down left
+            [1, 1], [1,-1], [-1, 1], [-1,-1]], dtype=np.int64)
+    elif connectedness==4:
+        offsets = np.array([
+            [0, 1], [1, 0], [0, -1], [-1, 0]], dtype=np.int64) # first row must be up right down left
     else:
         raise ValueError("invalid value {} for connectedness passed as argument".format(connectedness))
     # Init
@@ -1165,6 +1175,7 @@ cdef cpath_from_dijkstra_field(np.float32_t[:,::1] costmap, np.int64_t[::1] firs
     cdef np.int64_t n_best_edges
     cdef np.int64_t[::1] tied_firstplace_candidates = np.zeros((n_offsets,), dtype=np.int64)
     cdef np.int64_t stochastic_candidate_pick
+    cdef np.uint8_t[::1] blocked = np.zeros((8), dtype=np.uint8)
     # Path in global lowres map ij frame
     while True:
         current_cost = costmap[current_idxi, current_idxj]
@@ -1179,6 +1190,28 @@ cdef cpath_from_dijkstra_field(np.float32_t[:,::1] costmap, np.int64_t[::1] firs
                 offset_edge_cost = 0
             else:
                 offset_edge_cost = costmap[offset_idxi, offset_idxj] - current_cost
+                # check whether path is obstructed (for 16/32 connectedness)
+                if n < 4:
+                    if offset_edge_cost >= 0:
+                        blocked[n] = 1
+                elif n < 8:
+                    if offset_edge_cost >= 0:
+                        blocked[n] = 1
+                # Exclude obstructed jumps (for 16/32 connectedness)
+                if n > 4: # for example, prevent ur if u is blocked
+                    # assumes first row of offsets is up right down left (see offset init!)
+                    if (oj > 0 and blocked[0]) or \
+                       (oi > 0 and blocked[1]) or \
+                       (oj < 0 and blocked[2]) or \
+                       (oi < 0 and blocked[3]):
+                           offset_edge_cost = 0
+                if n > 8: # for example, prevent uuur if ur is blocked
+                    # second row ru rd lu ld
+                    if (oi > 0 and oj > 0 and blocked[4]) or \
+                       (oi > 0 and oj < 0 and blocked[5]) or \
+                       (oi < 0 and oj > 0 and blocked[6]) or \
+                       (oi < 0 and oj < 0 and blocked[7]):
+                           offset_edge_cost = 0
             # in 8/16 connectedness some offsets are 'longer' and will be preferred unless normalized
             olen = csqrt(oi*oi + oj*oj)
             offset_edge_cost = offset_edge_cost / olen
