@@ -43,18 +43,15 @@ grid32 = cmap2d.dijkstra(ij[0], inv_value=-1, connectedness=32)
 
 # distance transform
 ob = (cmap2d.occupancy() > cmap2d.thresh_occupied()).astype(np.uint8)
-f = grid4.astype(np.float32)
-griddt = cmap2d.obstructed_distance_transform_2d(f, ob)
-f = np.ones_like(ob, dtype=np.float32) * np.inf
-f[64,64] = 0
-F = np.sqrt(cmap2d.obstructed_distance_transform_2d(f, ob))
-F = cmap2d.obstructed_distance_transform_2d(F, ob)
+f = (grid4**2).astype(np.float32)
+D = cmap2d.obstructed_distance_transform_2d(f, ob)
+for i in range(10):
+    f = D
+    D = cmap2d.obstructed_distance_transform_2d(f, ob)
 plt.figure()
 gridshow(grid4, cmap=Greys_c10)
 plt.figure()
-gridshow(F, cmap=Greys_c10)
-plt.figure()
-gridshow(np.sqrt(griddt), cmap=Greys_c10)
+gridshow(np.sqrt(D), cmap=Greys_c10)
 plt.show()
 
 # Show
