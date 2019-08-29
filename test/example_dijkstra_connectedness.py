@@ -44,10 +44,13 @@ grid32 = cmap2d.dijkstra(ij[0], inv_value=-1, connectedness=32)
 # distance transform
 ob = (cmap2d.occupancy() > cmap2d.thresh_occupied()).astype(np.uint8)
 f = (grid4**2).astype(np.float32)
+tic = timer()
 D = cmap2d.obstructed_distance_transform_2d(f, ob)
 for i in range(10):
     f = D
     D = cmap2d.obstructed_distance_transform_2d(f, ob)
+toc= timer()
+print("Distance function smoothing: {}ms".format((toc-tic)*1000))
 plt.figure()
 gridshow(grid4, cmap=Greys_c10)
 plt.figure()

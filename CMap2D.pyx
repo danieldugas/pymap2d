@@ -1109,16 +1109,12 @@ cdef cobstructed_distance_transform_1d(np.float32_t[::1] f, np.uint8_t[::1] ob, 
     max_k = k
     k = 0
     for q in range(f.shape[0]):
-        print(f[q], ob[q])
-    print("-----------------------------------")
-    for q in range(f.shape[0]):
         D[q] = np.inf
         if ob[q] == 1: # skip obstructions
             continue
         # find the parabola corresponding to the current L.E section (where z[k] < q < z[k+1])
         # move k forward until the boundary with next is later than q
         while z[k+1] < q:
-            print(q, k, max_k, z[k], vob[k], v[k])
             k = k+1
         if vob[k] == 1:
             D[q] = np.inf
