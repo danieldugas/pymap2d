@@ -8,12 +8,12 @@ from timeit import default_timer as timer
 
 from map2d import gridshow
 
-cmap2d = CMap2D.CMap2D(".", "default")
+cmap2d = CMap2D.CMap2D(".", "tests")
+# ij = cmap2d.xy_to_ij(np.array([[0, 0]], dtype=np.float32))
+ij = np.array([[63,63]])
 cmap2d.set_resolution(1.)
 
 # Dijkstra ----------------------------------------------------------------------
-# ij = cmap2d.xy_to_ij(np.array([[0, 0]], dtype=np.float32))
-ij = np.array([[64,64]])
 
 tic = timer()
 cmap2d.dijkstra(ij[0], inv_value=-1, connectedness=4)
