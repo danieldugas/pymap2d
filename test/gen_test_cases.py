@@ -38,8 +38,24 @@ else:
 plt.close('all')
 
 # test case 2
-default = CMap2D.CMap2D(".", "default")
-ij = default.xy_to_ij(np.array([[0, 0]], dtype=np.float32))
+default = CMap2D.CMap2D(".", "tests")
+ij = np.array([[0, 0]], dtype=np.int64)
+args = (ij[0],)
+kwargs = {'inv_value':-1, 'connectedness': 16}
+grid16 = default.dijkstra(*args, **kwargs)
+gridshow(np.mod(np.maximum(grid16,0),2))
+plt.pause(0.1)
+print("Freeze test results [y/N]?")
+keys = input(">> ")
+if keys == 'y':
+    freeze_test_case(default.dijkstra, args, kwargs=kwargs, folder="./test_data", case_name="default_dijkstra_16")
+else:
+    pass
+plt.close('all')
+
+# test case 3
+default = CMap2D.CMap2D(".", "tests")
+ij = np.array([[0, 0]], dtype=np.int64)
 args = (ij[0],)
 kwargs = {'inv_value':-1, 'connectedness': 32}
 grid32 = default.dijkstra(*args, **kwargs)
@@ -52,4 +68,3 @@ if keys == 'y':
 else:
     pass
 plt.close('all')
-

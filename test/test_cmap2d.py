@@ -23,8 +23,15 @@ class TestStringMethods(unittest.TestCase):
         test_data = load_test_case(folder="test_data", case_name="office_full_coarse_as_sdf")
         self.assertTrue(np.allclose(test_data['outputs'], coarse.as_sdf()))
 
+    def test_default_dijkstra_16(self):
+        cmap2d = CMap2D.CMap2D(".", "tests", silent=True)
+        test_data = load_test_case(folder="test_data", case_name="default_dijkstra_16")
+        args = test_data['args']
+        kwargs = test_data['kwargs']
+        self.assertTrue(np.allclose(test_data['outputs'], cmap2d.dijkstra(*args, **kwargs)))
+
     def test_default_dijkstra_32(self):
-        cmap2d = CMap2D.CMap2D(".", "default", silent=True)
+        cmap2d = CMap2D.CMap2D(".", "tests", silent=True)
         test_data = load_test_case(folder="test_data", case_name="default_dijkstra_32")
         args = test_data['args']
         kwargs = test_data['kwargs']
