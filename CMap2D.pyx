@@ -12,6 +12,7 @@ from libc.math cimport cos as ccos
 from libc.math cimport sin as csin
 from libc.math cimport acos as cacos
 from libc.math cimport sqrt as csqrt
+from libc.math cimport floor as cfloor
 
 import os
 from yaml import load
@@ -19,21 +20,21 @@ from matplotlib.pyplot import imread
 
 
 cdef class CMap2D:
-    cdef public np.float32_t[:,::1] occupancy_ # [:, ::1] means 2d c-contiguous
+    cdef public np.float32_t[:,::1] _occupancy # [:, ::1] means 2d c-contiguous
     cdef int occupancy_shape0
     cdef int occupancy_shape1
     cdef float resolution_
-    cdef float thresh_occupied_
+    cdef float _thresh_occupied
     cdef float thresh_free
     cdef float HUGE_
     cdef public np.float32_t[:] origin
     def __init__(self, folder=None, name=None, silent=False):
-        self.occupancy_ = np.ones((100, 100), dtype=np.float32) * 0.5
+        self._occupancy = np.ones((100, 100), dtype=np.float32) * 0.5
         self.occupancy_shape0 = 100
         self.occupancy_shape1 = 100
         self.resolution_ = 0.01
         self.origin = np.array([0., 0.], dtype=np.float32)
-        self.thresh_occupied_ = 0.9
+        self._thresh_occupied = 0.9
         self.thresh_free = 0.1
         self.HUGE_ = 1e10
         if folder is None or name is None:
@@ -52,7 +53,7 @@ cdef class CMap2D:
         temp = (1. - mapimage.T[:, ::-1] / 254.).astype(np.float32)
               # (0 to 1) 1 means 100% certain occupied
         mapimage = np.ascontiguousarray(temp)
-        self.occupancy_ = mapimage
+        self._occupancy = mapimage
         self.occupancy_shape0 = mapimage.shape[0]
         self.occupancy_shape1 = mapimage.shape[1]
         self.resolution_ = mapparams["resolution"]  # [meters] side of 1 grid square
@@ -63,7 +64,7 @@ cdef class CMap2D:
                 " supported. Setting the value to 0 in the MAP_NAME.yaml file is one way to"
                 " resolve this."
             )
-        self.thresh_occupied_ = mapparams["occupied_thresh"]
+        self._thresh_occupied = mapparams["occupied_thresh"]
         self.thresh_free = mapparams["free_thresh"]
         self.HUGE_ = 100 * self.occupancy_shape0 * self.occupancy_shape1 # bigger than any possible distance in the map
         if self.resolution_ == 0:
@@ -80,7 +81,7 @@ cdef class CMap2D:
         return res
 
     def thresh_occupied(self):
-        res = float(self.thresh_occupied_)
+        res = float(self._thresh_occupied)
         return res
 
     def as_occupied_points_ij(self):
@@ -156,6 +157,13 @@ cdef class CMap2D:
         D = np.ones_like(self.occupancy(), dtype=np.float32) * np.inf
         cdistance_transform_2d(f, D)
         return np.sqrt(D)*self.resolution()
+
+    def distance_transform_2d_ij(self):
+        f = np.zeros_like(self.occupancy(), dtype=np.float32)
+        f[self.occupancy() <= self.thresh_occupied()] = np.inf
+        D = np.ones_like(self.occupancy(), dtype=np.float32) * np.inf
+        cdistance_transform_2d(f, D)
+        return np.sqrt(D)
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -249,22 +257,22 @@ cdef class CMap2D:
         i = i.astype(int)
         j = j.astype(int)
         if clip_if_outside:
-            i_gt = i >= self.occupancy_.shape[0]
+            i_gt = i >= self._occupancy.shape[0]
             i_lt = i < 0
-            j_gt = j >= self.occupancy_.shape[1]
+            j_gt = j >= self._occupancy.shape[1]
             j_lt = j < 0
             if isinstance(i, np.ndarray):
-                i[i_gt] = self.occupancy_.shape[0] - 1
+                i[i_gt] = self._occupancy.shape[0] - 1
                 i[i_lt] = 0
-                j[j_gt] = self.occupancy_.shape[1] - 1
+                j[j_gt] = self._occupancy.shape[1] - 1
                 j[j_lt] = 0
             else:
                 if i_gt:
-                    i = self.occupancy_.shape[0] - 1
+                    i = self._occupancy.shape[0] - 1
                 if i_lt:
                     i = 0
                 if j_gt:
-                    j = self.occupancy_.shape[1] - 1
+                    j = self._occupancy.shape[1] - 1
                 if j_lt:
                     j = 0
         return i, j
@@ -331,9 +339,9 @@ cdef class CMap2D:
         array(True)
         >>> a.is_inside_ij([[1,2]])
         array([ True])
-        >>> a.is_inside_ij([[1,a.occupancy_.shape[1]]])
+        >>> a.is_inside_ij([[1,a._occupancy.shape[1]]])
         array([False])
-        >>> a.is_inside_ij([[a.occupancy_.shape[0],2]])
+        >>> a.is_inside_ij([[a._occupancy.shape[0],2]])
         array([False])
         >>> a.is_inside_ij([[1,2], [-1, 0]])
         array([ True, False])
@@ -342,22 +350,28 @@ cdef class CMap2D:
             return self.is_inside_ij(*np.split(np.array(i), 2, axis=-1))[..., 0]
         return reduce(
             np.logical_and,
-            [i >= 0, i < self.occupancy_.shape[0], j >= 0, j < self.occupancy_.shape[1]],
+            [i >= 0, i < self._occupancy.shape[0], j >= 0, j < self._occupancy.shape[1]],
         )
 
     def occupancy(self):
-        occ = np.array(self.occupancy_)
+        occ = np.array(self._occupancy)
         return occ
 
     def occupancy_T(self):
         occ_T = np.zeros((self.occupancy_shape1, self.occupancy_shape0), dtype=np.float32)
         for i in range(self.occupancy_shape1):
             for j in range(self.occupancy_shape0):
-                occ_T[i, j] = self.occupancy_[j, i]
+                occ_T[i, j] = self._occupancy[j, i]
         return occ_T
 
     def as_sdf(self, raytracer=None):
         min_distances = self.distance_transform_2d()
+        # Switch sign for occupied and unkown points (*signed* distance field)
+        min_distances[self.occupancy() > self.thresh_free] *= -1.
+        return min_distances
+
+    def as_sdf_ij(self, raytracer=None):
+        min_distances = self.distance_transform_2d_ij()
         # Switch sign for occupied and unkown points (*signed* distance field)
         min_distances[self.occupancy() > self.thresh_free] *= -1.
         return min_distances
@@ -371,21 +385,21 @@ cdef class CMap2D:
             raise IndexError("Shape needs to be divisible by 2 in order to make coarse map")
         coarse.occupancy_shape0 = self.occupancy_shape0 / 2
         coarse.occupancy_shape1 = self.occupancy_shape1 / 2
-        coarse.occupancy_ = np.zeros((coarse.occupancy_shape0, coarse.occupancy_shape1), dtype=np.float32)
+        coarse._occupancy = np.zeros((coarse.occupancy_shape0, coarse.occupancy_shape1), dtype=np.float32)
         for i in range(coarse.occupancy_shape0):
             for j in range(coarse.occupancy_shape1):
-                coarse.occupancy_[i, j] = max(
-                        self.occupancy_[i*2  , j*2  ],
-                        self.occupancy_[i*2+1, j*2  ],
-                        self.occupancy_[i*2  , j*2+1],
-                        self.occupancy_[i*2+1, j*2+1],
+                coarse._occupancy[i, j] = max(
+                        self._occupancy[i*2  , j*2  ],
+                        self._occupancy[i*2+1, j*2  ],
+                        self._occupancy[i*2  , j*2+1],
+                        self._occupancy[i*2+1, j*2+1],
                         )
 
         coarse.resolution_ = self.resolution_ * 2
         coarse.origin = np.array([0., 0.], dtype=np.float32)
         coarse.origin[0] = self.origin[0]
         coarse.origin[1] = self.origin[1]
-        coarse.thresh_occupied_ = self.thresh_occupied_
+        coarse._thresh_occupied = self._thresh_occupied
         coarse.thresh_free = self.thresh_free
         coarse.HUGE_ = self.HUGE_
         return coarse
@@ -911,6 +925,164 @@ cdef class CMap2D:
                 ranges[idx] = min_solution
         return True
 
+    def visibility_map(self, observer_ij):
+        visibility_map = np.ones_like(self.occupancy(), dtype=np.float32) * -1
+        self.cvisibility_map_ij(np.array(observer_ij).astype(np.int64), visibility_map)
+        return visibility_map * self.resolution()
+
+    cdef cvisibility_map_ij(self, np.int64_t[::1] observer_ij, np.float32_t[:, ::1] visibility_map):
+        cdef np.int64_t o_i = observer_ij[0]
+        cdef np.int64_t o_j = observer_ij[1]
+        cdef np.float32_t threshold = self._thresh_occupied
+        cdef np.int64_t shape0 = self.occupancy_shape0
+        cdef np.int64_t shape1 = self.occupancy_shape1
+        max_r = np.maximum(shape0, shape1)
+        cdef np.float32_t min_angle_increment = 1. / max_r
+        cdef np.float32_t angle = 0.
+        cdef np.float32_t TWOPI = np.pi * 2.
+        cdef np.float32_t i_inc_unit
+        cdef np.float32_t j_inc_unit
+        cdef np.float32_t i_abs_inc
+        cdef np.float32_t j_abs_inc
+        cdef np.float32_t raystretch
+        cdef np.int64_t max_inc
+        cdef np.int64_t max_i_inc
+        cdef np.int64_t max_j_inc
+        cdef np.float32_t i_inc
+        cdef np.float32_t j_inc
+        cdef np.float32_t n_i
+        cdef np.float32_t n_j
+        cdef np.int64_t in_i
+        cdef np.int64_t in_j
+        cdef np.float32_t occ
+        cdef np.int64_t di
+        cdef np.int64_t dj
+        cdef np.float32_t r
+        cdef np.uint8_t is_hit
+        while True:
+            angle_increment = 0
+            if angle >= TWOPI:
+                break
+            i_inc_unit = ccos(angle)
+            j_inc_unit = csin(angle)
+            # Stretch the ray so that every 1 unit in the ray direction lands on a cell in i or 
+            i_abs_inc = abs(i_inc_unit)
+            j_abs_inc = abs(j_inc_unit)
+            raystretch = 1. / i_abs_inc if i_abs_inc >= j_abs_inc else 1. / j_abs_inc
+            i_inc = i_inc_unit * raystretch
+            j_inc = j_inc_unit * raystretch
+            # max amount of increments before crossing the grid border
+            if i_inc == 0:
+                max_inc = <np.int64_t>((shape1 - 1 - o_j) / j_inc) if j_inc >= 0 else <np.int64_t>(o_j / -j_inc)
+            elif j_inc == 0:
+                max_inc = <np.int64_t>((shape0 - 1 - o_i) / i_inc) if i_inc >= 0 else <np.int64_t>(o_i / -i_inc)
+            else:
+                max_i_inc = <np.int64_t>((shape1 - 1 - o_j) / j_inc) if j_inc >= 0 else <np.int64_t>(o_j / -j_inc)
+                max_j_inc = <np.int64_t>((shape0 - 1 - o_i) / i_inc) if i_inc >= 0 else <np.int64_t>(o_i / -i_inc)
+                max_inc = max_i_inc if max_i_inc <= max_j_inc else max_j_inc
+            # Trace a ray
+            n_i = o_i + 0
+            n_j = o_j + 0
+            for n in range(1, max_inc-1):
+                n_i += i_inc
+                in_i = <np.int64_t>n_i
+                in_j = <np.int64_t>n_j
+                di = ( in_i - o_i )
+                dj = ( in_j - o_j )
+                r = sqrt(di*di + dj*dj)
+                visibility_map[in_i, in_j] = r
+                occ = self._occupancy[in_i, in_j]
+                if occ >= threshold:
+                    angle_increment = 0.99 / r
+                    angle += angle_increment
+                    break
+                n_j += j_inc
+                in_i = <np.int64_t>n_i
+                in_j = <np.int64_t>n_j
+                di = ( in_i - o_i )
+                dj = ( in_j - o_j )
+                r = sqrt(di*di + dj*dj)
+                visibility_map[in_i, in_j] = r
+                occ = self._occupancy[in_i, in_j]
+                if occ >= threshold:
+                    angle_increment = 0.99 / r
+                    angle += angle_increment
+                    break
+            # if we hit the edge of the map
+            if angle_increment == 0:
+                angle_increment = min_angle_increment
+                angle += angle_increment
+
+    cdef craymarch(self, np.int64_t[::1] observer_ij, np.int64_t[::1] angles, np.float32_t[::1] ranges):
+        cdef np.int64_t o_i = observer_ij[0]
+        cdef np.int64_t o_j = observer_ij[1]
+        cdef np.float32_t[:,::1] esdf_ij = self.as_sdf_ij()
+        cdef np.float32_t resolution = self.resolution()
+        cdef np.float32_t threshold = self._thresh_occupied
+        cdef np.int64_t shape0 = self.occupancy_shape0
+        cdef np.int64_t shape1 = self.occupancy_shape1
+        cdef np.float32_t angle = 0.
+        cdef np.float32_t i_inc_unit
+        cdef np.float32_t j_inc_unit
+        cdef np.float32_t i_abs_inc
+        cdef np.float32_t j_abs_inc
+        cdef np.float32_t raystretch
+        cdef np.int64_t max_inc
+        cdef np.int64_t max_i_inc
+        cdef np.int64_t max_j_inc
+        cdef np.float32_t i_inc
+        cdef np.float32_t j_inc
+        cdef np.float32_t n_i
+        cdef np.float32_t n_j
+        cdef np.int64_t in_i
+        cdef np.int64_t in_j
+        cdef np.float32_t occ
+        cdef np.int64_t di
+        cdef np.int64_t dj
+        cdef np.float32_t r
+        for k in range(angles.shape[0]):
+            angle = angles[k]
+            i_inc_unit = ccos(angle)
+            j_inc_unit = csin(angle)
+            # Stretch the ray so that every 1 unit in the ray direction lands on a cell in i or 
+            i_abs_inc = abs(i_inc_unit)
+            j_abs_inc = abs(j_inc_unit)
+            raystretch = 1. / i_abs_inc if i_abs_inc >= j_abs_inc else 1. / j_abs_inc
+            i_inc = i_inc_unit * raystretch
+            j_inc = j_inc_unit * raystretch
+            # max amount of increments before crossing the grid border
+            if i_inc == 0:
+                max_inc = <np.int64_t>((shape1 - 1 - o_j) / j_inc) if j_inc >= 0 else <np.int64_t>(o_j / -j_inc)
+            elif j_inc == 0:
+                max_inc = <np.int64_t>((shape0 - 1 - o_i) / i_inc) if i_inc >= 0 else <np.int64_t>(o_i / -i_inc)
+            else:
+                max_i_inc = <np.int64_t>((shape1 - 1 - o_j) / j_inc) if j_inc >= 0 else <np.int64_t>(o_j / -j_inc)
+                max_j_inc = <np.int64_t>((shape0 - 1 - o_i) / i_inc) if i_inc >= 0 else <np.int64_t>(o_i / -i_inc)
+                max_inc = max_i_inc if max_i_inc <= max_j_inc else max_j_inc
+            # Trace a ray
+            n_i = o_i + 0
+            n_j = o_j + 0
+            in_i = <np.int64_t>n_i
+            in_j = <np.int64_t>n_j
+            for n in range(1, max_inc-1):
+                closest = esdf_ij[in_i, in_j]
+                if closest > 5:
+                    n_i += i_inc_unit * (closest - 1)
+                    n_j += j_inc_unit * (closest - 1)
+
+                occ3 = self._occupancy[in_i, <np.int64_t>(n_j+j_inc)] # makes the beam 'thicker' by checking intermediate pixels
+                n_i += i_inc
+                in_i = <np.int64_t>n_i
+                occ2 = self._occupancy[in_i, in_j]
+                n_j += j_inc
+                in_j = <np.int64_t>n_j
+                occ = self._occupancy[in_i, in_j]
+                if occ >= threshold or occ2 >= threshold or occ3 >= threshold:
+                    di = ( in_i - o_i )
+                    dj = ( in_j - o_j )
+                    r = sqrt(di*di + dj*dj) * resolution
+                    ranges[k] = r
+                    break
 
 cdef class CSimAgent:
     cdef public np.float32_t[:] pose_2d_in_map_frame
@@ -991,6 +1163,9 @@ cdef class CSimAgent:
             return left_leg_pose2d_in_map_frame, right_leg_pose2d_in_map_frame
         else:
             raise NotImplementedError
+
+
+
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
