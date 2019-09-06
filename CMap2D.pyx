@@ -926,9 +926,12 @@ cdef class CMap2D:
         return True
 
     def visibility_map(self, observer_ij):
+        return self.visibility_map_ij(observer_ij) * self.resolution()
+
+    def visibility_map_ij(self, observer_ij):
         visibility_map = np.ones_like(self.occupancy(), dtype=np.float32) * -1
         self.cvisibility_map_ij(np.array(observer_ij).astype(np.int64), visibility_map)
-        return visibility_map * self.resolution()
+        return visibility_map
 
     cdef cvisibility_map_ij(self, np.int64_t[::1] observer_ij, np.float32_t[:, ::1] visibility_map):
         cdef np.int64_t o_i = observer_ij[0]
