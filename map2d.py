@@ -810,7 +810,10 @@ class LocalMap2D(Map2D):
 
 
 def gridshow(*args, **kwargs):
-    """ utility function for showing 2d grids in matplotlib """
+    """ utility function for showing 2d grids in matplotlib,
+    wrapper around pyplot.imshow
+
+    use 'extent' = [-1, 1, -1, 1] to change the axis values """
     from matplotlib import pyplot as plt
     if not 'origin' in kwargs:
         kwargs['origin'] = 'lower'
