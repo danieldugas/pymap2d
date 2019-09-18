@@ -230,7 +230,14 @@ cdef class CMap2D:
                     ij[k, 1] = 0
         return ij
 
-    def xy_to_ij(self, x, y=None, clip_if_outside=True):
+    def xy_to_ij(self, xy, clip_if_outside=True):
+        if type(xy) is not np.ndarray:
+            xy = np.array(xy)
+        ij = np.zeros_like(xy, dtype=np.float32)
+        self.cxy_to_ij(xy.astype(np.float32), ij, clip_if_outside)
+        return ij.astype(np.int64)
+
+    def old_xy_to_ij(self, x, y=None, clip_if_outside=True):
         # if no y argument is given, assume x is a [...,2] array with xy in last dim
         """
         for each x y coordinate, return an i j cell index
