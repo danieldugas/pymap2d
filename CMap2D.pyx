@@ -107,7 +107,14 @@ cdef class CMap2D:
         gray = self.occupancy()
         ret, thresh = cv2.threshold(gray, self.thresh_occupied(), 1, cv2.THRESH_BINARY)
         thresh = thresh.astype(np.uint8)
-        cont, hier = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+        cv2_output = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+        # len(cv2_output) depends on cv2 version :/
+        if cv2.__version__[0] == '4':
+            cont = cv2_output[0] 
+        elif cv2.__version__[0] == '3':
+            cont = cv2_output[1]
+        else:
+            raise NotImplementedError("cv version {} unsupported".format(cv2.__version__))
         # remove extra dim
         contours = [np.vstack([c[:,0,1], c[:,0,0]]).T for c in cont]
         return contours
