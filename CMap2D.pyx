@@ -298,8 +298,9 @@ cdef class CMap2D:
     cdef cij_to_xy(self, np.float32_t[:,::1] ij):
         xy = np.zeros([ij.shape[0], ij.shape[1]], dtype=np.float32)
         for k in range(ij.shape[0]):
-            xy[k, 0] = ij[k, 0] * self.resolution_ + self.origin[0]
-            xy[k, 1] = ij[k, 1] * self.resolution_ + self.origin[1]
+            # adds 0.5 so that x y is in the middle of the cell. Otherwise ij->xy->ij is not identity
+            xy[k, 0] = (ij[k, 0]+0.5) * self.resolution_ + self.origin[0]
+            xy[k, 1] = (ij[k, 1]+0.5) * self.resolution_ + self.origin[1]
         return xy
 
     def ij_to_xy(self, i, j=None):
@@ -320,8 +321,9 @@ cdef class CMap2D:
             return np.concatenate(
                 self.ij_to_xy(*np.split(np.array(i), 2, axis=-1)), axis=-1
             )
-        x = i * self.resolution_ + self.origin[0]
-        y = j * self.resolution_ + self.origin[1]
+        # adds 0.5 so that x y is in the middle of the cell. Otherwise ij->xy->ij is not identity
+        x = (i + 0.5) * self.resolution_ + self.origin[0]
+        y = (j + 0.5) * self.resolution_ + self.origin[1]
         return x, y
 
     @cython.boundscheck(False)
