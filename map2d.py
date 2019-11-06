@@ -336,6 +336,9 @@ class Map2D(object):
                     j = 0
         return i, j
 
+    def xy_to_floatij(self, x):
+        return (x - self.origin) / self.resolution_
+
     def ij_to_xy(self, i, j=None):
         """
         Examples
