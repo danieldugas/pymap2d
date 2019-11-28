@@ -427,6 +427,138 @@ cdef class CMap2D:
         coarse.HUGE_ = self.HUGE_
         return coarse
 
+    def fastmarch(self, goal_ij, mask=None, speeds=None):
+        """ 
+
+        Nodes are cells in a 2d grid
+
+        calculates time to goal (sec) , assuming speed at nodes (ij/sec)
+
+        """
+        # Mask (close) unattainable nodes
+        if mask is None:
+            mask = (self.occupancy() >= self.thresh_free).astype(np.uint8)
+        # initialize extra costs
+        if speeds is None:
+            speeds = np.ones((self.occupancy_shape0, self.occupancy_shape1), dtype=np.float32)
+        # initialize field to large value
+        inv_value = np.inf
+        result = np.ones_like(self.occupancy(), dtype=np.float32) * inv_value
+        if not self.is_inside_ij(goal_ij[0], goal_ij[1]):
+            raise ValueError("Goal ij ({}, {}) not inside map of size ({}, {})".format(
+                goal_ij[0], goal_ij[1], self.occupancy_shape0, self.occupancy_shape1))
+        self.cfastmarch(goal_ij, result, mask, speeds)
+        return result
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    @cython.cdivision(True)
+    cdef cfastmarch(self, np.int64_t[:] goal_ij,
+            np.float32_t[:, ::1] tentative,
+            np.uint8_t[:, ::1] mask,
+            np.float32_t[:, ::1] speeds,
+            ):
+        # Initialize bool arrays
+        cdef np.uint8_t[:, ::1] open_ = np.ones((self.occupancy_shape0, self.occupancy_shape1), dtype=np.uint8)
+        # Mask (close) unattainable nodes
+        for i in range(self.occupancy_shape0):
+            for j in range(self.occupancy_shape1):
+                if mask[i, j]:
+                    open_[i, j] = 0
+        # Start at the goal location
+        tentative[goal_ij[0], goal_ij[1]] = 0
+        cdef cpp_priority_queue[cpp_pair[np.float32_t, cpp_pair[np.int64_t, np.int64_t]]] priority_queue
+        priority_queue.push(
+                cpp_pair[np.float32_t, cpp_pair[np.int64_t, np.int64_t]](0, cpp_pair[np.int64_t, np.int64_t](goal_ij[0], goal_ij[1]))
+                )
+        cdef cpp_pair[np.float32_t, cpp_pair[np.int64_t, np.int64_t]] popped
+        cdef np.int64_t popped_idxi
+        cdef np.int64_t popped_idxj
+        cdef np.int64_t[:, ::1] neighbor_offsets
+        neighbor_offsets = np.array([
+            [0, 1], [1, 0], [0, -1], [-1, 0]], dtype=np.int64) # first row must be up right down left
+        cdef np.int64_t n_neighbor_offsets = len(neighbor_offsets)
+        cdef np.int64_t len_i = tentative.shape[0]
+        cdef np.int64_t len_j = tentative.shape[1]
+        cdef np.int64_t smallest_tentative_id
+        cdef np.float32_t value
+        cdef np.float32_t smallest_tentative_value
+        cdef np.int64_t node_idxi
+        cdef np.int64_t node_idxj
+        cdef np.int64_t neighbor_idxi
+        cdef np.int64_t neighbor_idxj
+        cdef np.int64_t oi
+        cdef np.int64_t oj
+        cdef np.int64_t currenti = goal_ij[0]
+        cdef np.int64_t currentj = goal_ij[1]
+        cdef np.float32_t new_cost
+        cdef np.float32_t old_cost
+        cdef np.float32_t a
+        cdef np.float32_t b
+        cdef np.float32_t s
+        cdef np.float32_t s2inv
+        cdef np.float32_t delta
+        while not priority_queue.empty():
+            # Pop the node with the smallest tentative value from the to_visit list
+            while not priority_queue.empty():
+                popped = priority_queue.top()
+                priority_queue.pop()
+                popped_idxi = popped.second.first
+                popped_idxj = popped.second.second
+                # skip nodes which are already closed (stagnant duplicates in the heap)
+                if open_[popped_idxi, popped_idxj] == 1:
+                    currenti = popped_idxi
+                    currentj = popped_idxj
+                    break
+            # Iterate over neighbors
+            for n in range(n_neighbor_offsets):
+                # Indices for the neighbours
+                oi = neighbor_offsets[n, 0]
+                oj = neighbor_offsets[n, 1]
+                neighbor_idxi = currenti + oi
+                neighbor_idxj = currentj + oj
+                # exclude forbidden/explored areas of the grid
+                if neighbor_idxi < 0:
+                    continue
+                if neighbor_idxi >= len_i:
+                    continue
+                if neighbor_idxj < 0:
+                    continue
+                if neighbor_idxj >= len_j:
+                    continue
+                # Exclude invalid neighbors
+                if not open_[neighbor_idxi, neighbor_idxj]:
+                    continue
+                # Fastmarch update
+                a = np.inf
+                if neighbor_idxi != 0:
+                    a = tentative[neighbor_idxi-1, neighbor_idxj]
+                if neighbor_idxi != len_i-1:
+                    a = min(a, tentative[neighbor_idxi+1, neighbor_idxj])
+                b = np.inf
+                if neighbor_idxj != 0:
+                    b = tentative[neighbor_idxi, neighbor_idxj-1]
+                if neighbor_idxj != len_j-1:
+                    b = min(b, tentative[neighbor_idxi, neighbor_idxj+1])
+                s = speeds[neighbor_idxi, neighbor_idxj]
+                s2inv = 1./s**2
+                delta = 2 * s2inv - (a-b)**2
+                if delta > 0:
+                    new_cost = ( a + b + csqrt(delta) ) / 2
+                else:
+                    new_cost = 1./s + min(a,b)
+                old_cost = tentative[neighbor_idxi, neighbor_idxj]
+                if new_cost < old_cost or old_cost == np.inf:
+                    tentative[neighbor_idxi, neighbor_idxj] = new_cost
+                    # Add neighbor to priority queue
+                    priority_queue.push(
+                            cpp_pair[np.float32_t, cpp_pair[np.int64_t, np.int64_t]](
+                                -new_cost, cpp_pair[np.int64_t, np.int64_t](neighbor_idxi, neighbor_idxj))
+                            )
+            # Close the current node
+            open_[currenti, currentj] = 0
+        return tentative
 
     def dijkstra(self, goal_ij, mask=None, extra_costs=None, inv_value=None, connectedness=8):
         """ 4, 8, 16, or 32 connected dijkstra 
@@ -468,7 +600,6 @@ cdef class CMap2D:
             for j in range(self.occupancy_shape1):
                 if mask[i, j]:
                     open_[i, j] = 0
-        result = (np.ones((self.occupancy_shape0, self.occupancy_shape1)) * inv_value).astype(np.float32)
         # Start at the goal location
         tentative[goal_ij[0], goal_ij[1]] = 0
         cdef cpp_priority_queue[cpp_pair[np.float32_t, cpp_pair[np.int64_t, np.int64_t]]] priority_queue
