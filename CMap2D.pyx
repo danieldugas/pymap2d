@@ -404,10 +404,9 @@ cdef class CMap2D:
         if n > 1:
             return self.as_coarse_map2d(n=int(n-1)).as_coarse_map2d()
         coarse = CMap2D()
-        if self.occupancy_shape0 % 2 != 0 or self.occupancy_shape1 % 2 != 0:
-            raise IndexError("Shape needs to be divisible by 2 in order to make coarse map")
-        coarse.occupancy_shape0 = self.occupancy_shape0 / 2
-        coarse.occupancy_shape1 = self.occupancy_shape1 / 2
+        # if the number of rows/column is not even, this will discard the last one
+        coarse.occupancy_shape0 = int(cfloor(self.occupancy_shape0 / 2))
+        coarse.occupancy_shape1 = int(cfloor(self.occupancy_shape1 / 2))
         coarse._occupancy = np.zeros((coarse.occupancy_shape0, coarse.occupancy_shape1), dtype=np.float32)
         for i in range(coarse.occupancy_shape0):
             for j in range(coarse.occupancy_shape1):
