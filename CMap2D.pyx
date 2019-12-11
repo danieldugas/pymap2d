@@ -1147,11 +1147,12 @@ cdef class CMap2D:
                 dj = ( in_j - o_j )
                 r = sqrt(di*di + dj*dj)
                 visibility_map[in_i, in_j] = r
-                occ = self._occupancy[in_i, in_j]
-                if occ >= threshold:
-                    angle_increment = 0.99 / r
-                    angle += angle_increment
-                    break
+                if r != 0:
+                    occ = self._occupancy[in_i, in_j]
+                    if occ >= threshold:
+                        angle_increment = 0.99 / r
+                        angle += angle_increment
+                        break
                 n_j += j_inc
                 in_i = <np.int64_t>n_i
                 in_j = <np.int64_t>n_j
@@ -1159,11 +1160,12 @@ cdef class CMap2D:
                 dj = ( in_j - o_j )
                 r = sqrt(di*di + dj*dj)
                 visibility_map[in_i, in_j] = r
-                occ = self._occupancy[in_i, in_j]
-                if occ >= threshold:
-                    angle_increment = 0.99 / r
-                    angle += angle_increment
-                    break
+                if r != 0:
+                    occ = self._occupancy[in_i, in_j]
+                    if occ >= threshold:
+                        angle_increment = 0.99 / r
+                        angle += angle_increment
+                        break
             # if we hit the edge of the map
             if angle_increment == 0:
                 angle_increment = min_angle_increment
