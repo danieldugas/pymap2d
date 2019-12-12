@@ -70,6 +70,26 @@ cdef class CMap2D:
         if self.resolution_ == 0:
             raise ValueError("resolution can not be 0")
 
+    def from_msg(self, msg):
+        self.origin[0] = msg.info.origin.position.x
+        self.origin[1] = msg.info.origin.position.y
+        self.set_resolution(msg.info.resolution)
+        self.cset_occupancy(
+            np.ascontiguousarray(np.array(msg.data).reshape(
+                (msg.info.height, msg.info.width)
+            ).T * 0.01).astype(np.float32)
+        )
+        self.HUGE_ = 100 * np.prod(
+            self._occupancy.shape
+        )  # bigger than any possible distance in the map
+#         self._thresh_occupied # TODO
+#         self.thresh_free
+
+    def cset_occupancy(self, np.float32_t[:,::1] occupancy):
+        self._occupancy = occupancy.copy()
+        self.occupancy_shape0 = occupancy.shape[0]
+        self.occupancy_shape1 = occupancy.shape[1]
+
     def cset_resolution(self, float res):
         self.resolution_ = res
 
