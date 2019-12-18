@@ -111,6 +111,8 @@ cdef class CMap2D:
         """ Converts map into list of contours of obstacles, in xy
         returns list of obstacles, for each obstacle a list of xy vertices constituing its contour
         based on the opencv2 findContours function
+
+        contours = [ [[x1, y1], [x2, y2], ...], [...] ]
         """
 
         cont = self.as_closed_obst_vertices_ij()
