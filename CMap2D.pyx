@@ -796,8 +796,8 @@ cdef class CMap2D:
         final_ranges = np.min(all_sol, axis=1)
         ranges[:] = final_ranges
 
-    def render_agents_in_many_lidars(self, ranges, xythetas, agents):
-        self.crender_agents_in_many_lidars(ranges, xythetas, agents)
+    def render_agents_in_many_lidars(self, ranges, xythetas, agents, first_lidar_only=0):
+        self.crender_agents_in_many_lidars(ranges, xythetas, agents, np.uint8(first_lidar_only))
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -807,6 +807,7 @@ cdef class CMap2D:
             np.ndarray[np.float32_t, ndim=3, mode='c'] ranges,   # agent, points, n_lidars_p_agent
             np.float32_t[:,:,:,::1] ijthetas, # agent, points, n_lidars_p_agent, i j th
             agents,
+            np.uint8_t first_lidar_only,
             ):
         """ Takes a list of agents (shapes + position) and renders them into the occupancy grid
         assumes the angles are ordered from lowest to highest, spaced evenly (const increment)
@@ -870,6 +871,9 @@ cdef class CMap2D:
         cdef int k
         cdef bool wholescan = False
         for a in range(n_agents): # apply to each agent
+            if first_lidar_only:
+                if a != 0:
+                    break
             for lr in range(n_lidars_per_agent): # apply to left / right lidar
                 # apply render agents to single lidar scan
                 k = 0
