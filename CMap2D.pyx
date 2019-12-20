@@ -359,20 +359,43 @@ cdef class CMap2D:
     @cython.wraparound(False)
     @cython.nonecheck(False)
     @cython.cdivision(True)
-    cdef cis_inside_ij(self, np.float32_t[:,::1] ij):
-        inside = np.ones([ij.shape[0],], dtype=np.bool)
+    cdef cis_inside_ij(self, np.float32_t[:,::1] ij, np.uint8_t[:] is_inside):
+        cdef int k
         for k in range(ij.shape[0]):
             if ij[k, 0] >= self.occupancy_shape0:
-                inside[k] = False
+                is_inside[k] = 0
+                continue
             if ij[k, 1] >= self.occupancy_shape1:
-                inside[k] = False
+                is_inside[k] = 0
+                continue
             if ij[k, 0] < 0:
-                inside[k] = False
+                is_inside[k] = 0
+                continue
             if ij[k, 1] < 0:
-                inside[k] = False
-        return inside
+                is_inside[k] = 0
+                continue
 
-    def is_inside_ij(self, i, j=None):
+    def is_inside_ij(self, ij):
+        from functools import reduce
+        """
+        Examples
+        --------
+        >>> a = Map2D()
+        >>> a.is_inside_ij([[1,2]])
+        array([ True])
+        >>> a.is_inside_ij([[1,a._occupancy.shape[1]]])
+        array([False])
+        >>> a.is_inside_ij([[a._occupancy.shape[0],2]])
+        array([False])
+        >>> a.is_inside_ij([[1,2], [-1, 0]])
+        array([ True, False])
+        """
+        is_inside = np.ones([ij.shape[0],], dtype=np.uint8)
+        self.cis_inside_ij(ij, is_inside)
+        return is_inside
+
+    # OLD
+    def old_is_inside_ij(self, i, j=None):
         from functools import reduce
         """
         Examples
@@ -465,7 +488,7 @@ cdef class CMap2D:
         # initialize field to large value
         inv_value = np.inf
         result = np.ones_like(self.occupancy(), dtype=np.float32) * inv_value
-        if not self.is_inside_ij(goal_ij[0], goal_ij[1]):
+        if not self.is_inside_ij(np.array([goal_ij]).astype(np.float32))[0]:
             raise ValueError("Goal ij ({}, {}) not inside map of size ({}, {})".format(
                 goal_ij[0], goal_ij[1], self.occupancy_shape0, self.occupancy_shape1))
         self.cfastmarch(goal_ij, result, mask, speeds)
@@ -598,7 +621,7 @@ cdef class CMap2D:
         if inv_value is None:
             inv_value = self.HUGE_
         result = np.ones_like(self.occupancy(), dtype=np.float32) * inv_value
-        if not self.is_inside_ij(goal_ij[0], goal_ij[1]):
+        if not self.is_inside_ij(np.array([goal_ij]).astype(np.float32))[0]:
             raise ValueError("Goal ij ({}, {}) not inside map of size ({}, {})".format(
                 goal_ij[0], goal_ij[1], self.occupancy_shape0, self.occupancy_shape1))
         self.cdijkstra(goal_ij, result, mask, extra_costs, inv_value, connectedness)
@@ -1605,3 +1628,21 @@ cdef cpath_from_dijkstra_field(np.float32_t[:,::1] costmap, np.int64_t[::1] firs
         current_idxj = current_idxj + offsets[selected_offset_id, 1]
         path.append([current_idxi, current_idxj])
     return np.array(path), np.array(jump_log)
+
+# tools for performance
+def fast_2f_norm(vec2f):
+    return cfast_2f_norm(vec2f)
+cdef double cfast_2f_norm(double[:] vec2f):
+    return csqrt( vec2f[0]**2 + vec2f[1]**2 )
+def fast_3f_clip(vec3f, min3f, max3f):
+    result = vec3f * 1.
+    cfast_3f_clip(vec3f, min3f, max3f, result)
+    return result
+cdef cfast_3f_clip(double[:] vec3f, double[:] min3f, double[:] max3f, double[:] result):
+    cdef int i
+    for i in range(3):
+        result[i] = max(result[i], min3f[i])
+        result[i] = min(result[i], max3f[i])
+
+
+
