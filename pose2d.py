@@ -5,6 +5,20 @@ def Pose2D(tf_msg):
     return np.array([tf_msg[0][0], tf_msg[0][1], 
         tf.transformations.euler_from_quaternion(tf_msg[1])[2]])
 
+def posemsg_to_pose2d(posemsg):
+    import tf
+    quaternion = (
+        posemsg.orientation.x,
+        posemsg.orientation.y,
+        posemsg.orientation.z,
+        posemsg.orientation.w,
+    )
+    xytheta = np.array([0., 0., 0.])
+    xytheta[0] = posemsg.position.x
+    xytheta[1] = posemsg.position.y
+    xytheta[2] = tf.transformations.euler_from_quaternion(quaternion)[2]
+    return xytheta
+
 def apply_tf(x, pose2d):
     """ Applies transform to x
     x is a list of x y points
