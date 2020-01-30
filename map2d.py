@@ -8,7 +8,7 @@ from yaml import load
 from circular_index import CircularIndexCreator
 import pose2d
 
-from numba import njit, autojit
+from numba import njit
 from math import sqrt, floor, log
 
 
