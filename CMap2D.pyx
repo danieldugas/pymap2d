@@ -129,6 +129,8 @@ cdef class CMap2D:
         gray = self.occupancy()
         ret, thresh = cv2.threshold(gray, self.thresh_occupied(), 1, cv2.THRESH_BINARY)
         thresh = thresh.astype(np.uint8)
+        kernel = np.ones((3,3),np.uint8)
+        thresh = cv2.dilate(thresh, kernel, iterations=1)
         cv2_output = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
         # len(cv2_output) depends on cv2 version :/
         if cv2.__version__[0] == '4':
