@@ -216,6 +216,7 @@ def compiled_insert_scan(hits_and_misses, prior, phit, pmiss):
 
 class Map2D(object):
     def __init__(self, folder=None, name=None):
+        print("WARNING: Map2D is deprecated in favor of CMap2D")
         self.occupancy_ = np.ones((100, 100)) * 0.5
         self.resolution_ = 0.01
         self.origin = np.array([0., 0.])

@@ -1129,15 +1129,21 @@ cdef class CMap2D:
                 ranges[idx] = min_solution
         return True
 
-    def visibility_map(self, observer_ij):
-        return self.visibility_map_ij(observer_ij) * self.resolution()
+    def visibility_map(self, observer_ij, fov=None):
+        return self.visibility_map_ij(observer_ij, fov=fov) * self.resolution()
 
-    def visibility_map_ij(self, observer_ij):
+    def visibility_map_ij(self, observer_ij, fov=None):
         visibility_map = np.ones_like(self.occupancy(), dtype=np.float32) * -1
-        self.cvisibility_map_ij(np.array(observer_ij).astype(np.int64), visibility_map)
+        if fov is None:
+            fov = [0, np.pi * 2.]
+        min_angle = np.float32(fov[0])
+        max_angle = np.float32(fov[1])
+        self.cvisibility_map_ij(np.array(observer_ij).astype(np.int64), visibility_map,
+                                min_angle, max_angle)
         return visibility_map
 
-    cdef cvisibility_map_ij(self, np.int64_t[::1] observer_ij, np.float32_t[:, ::1] visibility_map):
+    cdef cvisibility_map_ij(self, np.int64_t[::1] observer_ij, np.float32_t[:, ::1] visibility_map,
+                            np.float32_t min_angle, np.float32_t max_angle):
         cdef np.int64_t o_i = observer_ij[0]
         cdef np.int64_t o_j = observer_ij[1]
         cdef np.float32_t threshold = self._thresh_occupied
@@ -1145,8 +1151,7 @@ cdef class CMap2D:
         cdef np.int64_t shape1 = self.occupancy_shape1
         max_r = np.maximum(shape0, shape1)
         cdef np.float32_t min_angle_increment = 1. / max_r
-        cdef np.float32_t angle = 0.
-        cdef np.float32_t TWOPI = np.pi * 2.
+        cdef np.float32_t angle = min_angle
         cdef np.float32_t i_inc_unit
         cdef np.float32_t j_inc_unit
         cdef np.float32_t i_abs_inc
@@ -1168,7 +1173,7 @@ cdef class CMap2D:
         cdef np.uint8_t is_hit
         while True:
             angle_increment = 0
-            if angle >= TWOPI:
+            if angle >= max_angle:
                 break
             i_inc_unit = ccos(angle)
             j_inc_unit = csin(angle)
