@@ -88,5 +88,11 @@ contours_ij = [cmap2d.xy_to_ij(c) for c in contours]
 cmap2d.plot_contours(contours_ij)
 print("done.")
 
+# tsdf empty like
+cmap2d_2 = cmap2d.empty_like()
+cmap2d_2._occupancy[2:4, 6] = 1.
+plt.figure("empty_like sdf")
+gridshow(cmap2d_2.as_sdf())
+
 plt.show()
 

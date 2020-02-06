@@ -70,6 +70,21 @@ cdef class CMap2D:
         if self.resolution_ == 0:
             raise ValueError("resolution can not be 0")
 
+    def empty_like(self):
+        width_i = self._occupancy.shape[0]
+        height_j = self._occupancy.shape[1]
+        newmap = CMap2D()
+        newmap._occupancy = np.zeros((width_i, height_j), dtype=np.float32)
+        newmap.occupancy_shape0 = width_i
+        newmap.occupancy_shape1 = height_j
+        newmap.resolution_ = self.resolution_
+        newmap.origin[0] = self.origin[0]
+        newmap.origin[1] = self.origin[1]
+        newmap._thresh_occupied = self._thresh_occupied
+        newmap.thresh_free = self.thresh_free
+        newmap.HUGE_ = self.HUGE_
+        return newmap
+
     def from_msg(self, msg):
         self.origin[0] = msg.info.origin.position.x
         self.origin[1] = msg.info.origin.position.y
