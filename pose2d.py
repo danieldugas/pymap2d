@@ -65,6 +65,14 @@ def apply_tf_to_vel(vel, pose2d):
     # same as apply_tf but assumes vel is xdot ydot thetadot instead of x y
     # for xdot ydot frame transformation applies, 
     # but thetadot is invariant due to frames being fixed.
+    xy = rotate(vel[...,:2], pose2d[2])
+    th = vel[...,2]
+    xyth = np.zeros_like(vel)
+    xyth[...,:2] = xy
+    xyth[...,2] = th
+    return xyth
+
+def old_apply_tf_to_vel(vel, pose2d):
     xy = rotate(np.array([vel[...,:2]]), pose2d[2])[0]
     th = vel[...,2]
     return np.array([xy[0], xy[1], th])
