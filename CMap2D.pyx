@@ -100,6 +100,27 @@ cdef class CMap2D:
 #         self._thresh_occupied # TODO
 #         self.thresh_free
 
+    def serialize(self):
+        return {
+            "occupancy": np.array(self._occupancy),
+            "occupancy_shape0": int(self.occupancy_shape0),
+            "occupancy_shape1": int(self.occupancy_shape1),
+            "resolution_": float(self.resolution_),
+            "_thresh_occupied": float(self._thresh_occupied),
+            "thresh_free": float(self.thresh_free),
+            "HUGE_": float(self.HUGE_),
+            "origin": np.array(self.origin),
+        }
+    def unserialize(self, dict_):
+        self._occupancy = dict_["occupancy"] 
+        self.occupancy_shape0 = dict_["occupancy_shape0"] 
+        self.occupancy_shape1 = dict_["occupancy_shape1"] 
+        self.resolution_ = dict_["resolution_"] 
+        self._thresh_occupied = dict_["_thresh_occupied"] 
+        self.thresh_free = dict_["thresh_free"] 
+        self.HUGE_ = dict_["HUGE_"] 
+        self.origin = dict_["origin"] 
+
     def cset_occupancy(self, np.float32_t[:,::1] occupancy):
         self._occupancy = occupancy.copy()
         self.occupancy_shape0 = occupancy.shape[0]
@@ -411,7 +432,6 @@ cdef class CMap2D:
         self.cis_inside_ij(ij, is_inside)
         return is_inside
 
-    # OLD
     def old_is_inside_ij(self, i, j=None):
         from functools import reduce
         """
