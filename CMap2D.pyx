@@ -19,6 +19,18 @@ from yaml import load
 from matplotlib.pyplot import imread
 
 
+def gridshow(*args, **kwargs):
+    """ utility function for showing 2d grids in matplotlib,
+    wrapper around pyplot.imshow
+
+    use 'extent' = [-1, 1, -1, 1] to change the axis values """
+    from matplotlib import pyplot as plt
+    if not 'origin' in kwargs:
+        kwargs['origin'] = 'lower'
+    if not 'cmap' in kwargs:
+        kwargs['cmap'] = plt.cm.Greys
+    return plt.imshow(*(arg.T if i == 0 else arg for i, arg in enumerate(args)), **kwargs)
+
 cdef class CMap2D:
     cdef public np.float32_t[:,::1] _occupancy # [:, ::1] means 2d c-contiguous
     cdef int occupancy_shape0
