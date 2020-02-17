@@ -112,6 +112,41 @@ cdef class CMap2D:
 #         self._thresh_occupied # TODO
 #         self.thresh_free
 
+    def from_scan(self, scan, resolution=0.05, limits=None):
+        """ Creating a map from a scan places the x y origin in the center of the grid,
+        and generates the occupancy field from the laser data.
+        limits are in lidar frame (meters) [[xmin, xmax], [ymin, ymax]]
+        """
+        angles = np.arange(scan.angle_min,
+                           scan.angle_max + scan.angle_increment,
+                           scan.angle_increment)[:len(scan.ranges)]
+        ranges = np.array(scan.ranges)
+        xy_hits = (ranges * np.array([np.cos(angles), np.sin(angles)])).T
+        xy_hits = xy_hits[ranges != 0]
+        xy_hits = np.ascontiguousarray(xy_hits.astype(np.float32))
+        if limits is None:
+            limits = np.array([[np.min(xy_hits[:,0]), np.max(xy_hits[:,0])],
+                               [np.min(xy_hits[:,1]), np.max(xy_hits[:,1])]],
+                              dtype=np.float32)
+        # fill map
+        self.origin = limits[:, 0]
+        width = int((limits[0, 1] - limits[0, 0]) / resolution)
+        height = int((limits[1, 1] - limits[1, 0]) / resolution)
+        self.occupancy_shape0 = width
+        self.occupancy_shape1 = height
+        self.resolution_ = resolution
+        self._thresh_occupied = 0.9
+        self.thresh_free = 0.1
+        ij_hits = self.xy_to_ij(xy_hits, clip_if_outside=False)
+        is_inside = self.is_inside_ij(ij_hits.astype(np.float32))
+        ij_hits = ij_hits[np.where(is_inside)]
+        occupancy = 0.05 * np.ones((width, height), dtype=np.float32)
+        occupancy[tuple(ij_hits.T)] = 0.95
+        self._occupancy = occupancy
+#         ij_laser_orig = (-self.origin / self.resolution_).astype(int)
+#         compiled_reverse_raytrace(ij_hits, ij_laser_orig, self.occupancy_) # TODO
+
+
     def serialize(self):
         return {
             "occupancy": np.array(self._occupancy),
