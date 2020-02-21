@@ -555,6 +555,51 @@ cdef class CMap2D:
         coarse.HUGE_ = self.HUGE_
         return coarse
 
+    def direction_in_field(self, pos_ij, field):
+        norm_dir = np.zeros((2,), dtype=np.float32)
+        self.cdirection_in_field(pos_ij, field, norm_dir)
+        return norm_dir
+
+    def cdirection_in_field(self, np.int64_t[:] ij , np.float32_t[:,::1] field, np.float32_t[:] norm_dir):
+        cdef int k
+        cdef np.int64_t i = ij[0]
+        cdef np.int64_t j = ij[1]
+        cdef np.int64_t offset_i
+        cdef np.int64_t offset_j
+        cdef np.int64_t neighbor_i
+        cdef np.int64_t neighbor_j
+        cdef int n_neighbors = 8
+        cdef np.int64_t[:,::1] neighbor_offsets = np.array([
+                [0, 1], [1, 0], [ 0,-1], [-1, 0],
+                [1, 1], [1,-1], [-1, 1], [-1,-1]], dtype=np.int64)
+        cdef np.float32_t b_val_min = field[i, j]
+        cdef np.float32_t b_val
+        cdef np.float32_t norm
+        norm_dir[0] = 0.
+        norm_dir[1] = 0.
+        for k in range(n_neighbors):
+            offset_i = neighbor_offsets[k][0]
+            offset_j = neighbor_offsets[k][1]
+            neighbor_i = i + offset_i
+            neighbor_j = j + offset_j
+            if (neighbor_i >= self.occupancy_shape0 or
+                neighbor_i < 0 or
+                neighbor_j >= self.occupancy_shape1 or
+                neighbor_i < 0):
+                continue
+            b_val = field[neighbor_i, neighbor_j]
+            if b_val < b_val_min:
+                b_val_min = b_val
+                norm_dir[0] = offset_i
+                norm_dir[1] = offset_j
+        norm = csqrt(norm_dir[0]**2 + norm_dir[1]**2)
+        if norm > 0:
+            norm_dir[0] = norm_dir[0] / norm
+            norm_dir[1] = norm_dir[1] / norm
+
+
+
+        
     def fastmarch(self, goal_ij, mask=None, speeds=None):
         """ 
 

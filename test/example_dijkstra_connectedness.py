@@ -224,6 +224,10 @@ plt.plot(gridfmpath32[:,0], gridfmpath32[:,1], '-o', color=plt.cm.winter(  1.) ,
 plt.title("FMM")
 ax3.legend([ '4-connected', '8-connected', '16-connected', '32-connected'])
 
+plt.figure()
+directions = np.array([cmap2d.direction_in_field(p, gridfm) for p in gridfmpath8])
+plt.quiver(gridfmpath8[:,0],  gridfmpath8[:,1], directions[:,0], directions[:,1])
+
 # Contours as Vertices
 tic = timer()
 contours = cmap2d.as_closed_obst_vertices()
