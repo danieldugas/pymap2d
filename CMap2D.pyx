@@ -112,7 +112,7 @@ cdef class CMap2D:
 #         self._thresh_occupied # TODO
 #         self.thresh_free
 
-    def from_scan(self, scan, resolution=0.05, limits=None):
+    def from_scan(self, scan, resolution=0.05, limits=None, inscribed_radius=None):
         """ Creating a map from a scan places the x y origin in the center of the grid,
         and generates the occupancy field from the laser data.
         limits are in lidar frame (meters) [[xmin, xmax], [ymin, ymax]]
@@ -121,6 +121,8 @@ cdef class CMap2D:
                            scan.angle_max + scan.angle_increment,
                            scan.angle_increment)[:len(scan.ranges)]
         ranges = np.array(scan.ranges)
+        if inscribed_radius is not None:
+            ranges[ranges < inscribed_radius] = np.inf
         xy_hits = (ranges * np.array([np.cos(angles), np.sin(angles)])).T
         xy_hits = xy_hits[ranges != 0]
         xy_hits = np.ascontiguousarray(xy_hits.astype(np.float32))
