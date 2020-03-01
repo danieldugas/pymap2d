@@ -1427,6 +1427,24 @@ cdef class CMap2D:
                     ranges[k] = r
                     break
 
+    def numpy_to_occupancy_grid_msg(self, arr, frame_id, stamp):
+        from nav_msgs.msg import OccupancyGrid
+        if not len(arr.shape) == 2:
+                raise TypeError('Array must be 2D')
+        arr = arr.T * 100.
+        if not arr.dtype == np.int8:
+            arr = arr.astype(np.int8)
+        grid = OccupancyGrid()
+        grid.header.frame_id = frame_id
+        grid.header.stamp = stamp
+        grid.data = arr.ravel()
+        grid.info.resolution = self.resolution()
+        grid.info.height = arr.shape[0]
+        grid.info.width = arr.shape[1]
+        grid.info.origin.position.x = self.origin[0]
+        grid.info.origin.position.y = self.origin[1]
+        return grid 
+
 cdef class CSimAgent:
     cdef public np.float32_t[:] pose_2d_in_map_frame
     cdef public np.float32_t[:] vel_in_map_frame
