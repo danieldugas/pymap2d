@@ -1500,6 +1500,12 @@ cdef class CSimAgent:
                 right_leg_pose2d_in_agent_frame, m_a_T, right_leg_pose2d_in_map_frame)
 
     def get_legs_pose2d_in_map(self):
+        left_leg_pose2d_in_map_frame = np.zeros((1,3), dtype=np.float32)
+        right_leg_pose2d_in_map_frame = np.zeros((1,3), dtype=np.float32)
+        self.cget_legs_pose2d_in_map(left_leg_pose2d_in_map_frame, right_leg_pose2d_in_map_frame)
+        return left_leg_pose2d_in_map_frame[0], right_leg_pose2d_in_map_frame[0]
+
+    def old_get_legs_pose2d_in_map(self):
         m_a_T = self.pose_2d_in_map_frame
         vel_norm = np.sqrt(self.vel_in_map_frame[0]**2 + self.vel_in_map_frame[1]**2)
         if self.type == "legs":
