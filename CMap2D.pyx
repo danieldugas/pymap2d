@@ -15,7 +15,7 @@ from libc.math cimport sqrt as csqrt
 from libc.math cimport floor as cfloor
 
 import os
-from yaml import load
+from yaml import load, FullLoader
 from matplotlib.pyplot import imread
 
 
@@ -57,7 +57,7 @@ cdef class CMap2D:
         if not silent:
             print("Loading map definition from {}".format(yaml_file))
         with open(yaml_file) as stream:
-            mapparams = load(stream)
+            mapparams = load(stream, Loader=FullLoader)
         map_file = os.path.join(folder, mapparams["image"])
         if not silent:
             print("Map definition found. Loading map from {}".format(map_file))
