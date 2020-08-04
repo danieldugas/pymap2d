@@ -161,14 +161,14 @@ cdef class CMap2D:
             "origin": np.array(self.origin),
         }
     def unserialize(self, dict_):
-        self._occupancy = dict_["occupancy"] 
-        self.occupancy_shape0 = dict_["occupancy_shape0"] 
-        self.occupancy_shape1 = dict_["occupancy_shape1"] 
-        self.resolution_ = dict_["resolution_"] 
-        self._thresh_occupied = dict_["_thresh_occupied"] 
-        self.thresh_free = dict_["thresh_free"] 
-        self.HUGE_ = dict_["HUGE_"] 
-        self.origin = dict_["origin"] 
+        self._occupancy = dict_["occupancy"]
+        self.occupancy_shape0 = dict_["occupancy_shape0"]
+        self.occupancy_shape1 = dict_["occupancy_shape1"]
+        self.resolution_ = dict_["resolution_"]
+        self._thresh_occupied = dict_["_thresh_occupied"]
+        self.thresh_free = dict_["thresh_free"]
+        self.HUGE_ = dict_["HUGE_"]
+        self.origin = dict_["origin"]
 
     def cset_occupancy(self, np.float32_t[:,::1] occupancy):
         self._occupancy = occupancy.copy()
@@ -219,7 +219,7 @@ cdef class CMap2D:
         cv2_output = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
         # len(cv2_output) depends on cv2 version :/
         if cv2.__version__[0] == '4':
-            cont = cv2_output[0] 
+            cont = cv2_output[0]
         elif cv2.__version__[0] == '3':
             cont = cv2_output[1]
         else:
@@ -238,7 +238,7 @@ cdef class CMap2D:
         args = args[1:]
         for c in contours:
             # add the first vertice at the end to close the plotted contour
-            cplus = np.concatenate((c, c[:1, :]), axis=0)
+            cplus = np.concatenate((c, c[:1]), axis=0)
             plt.plot(cplus[:,0], cplus[:,1], *args, **kwargs)
 
     @cython.boundscheck(False)
@@ -252,7 +252,7 @@ cdef class CMap2D:
         cdef np.int64_t pj
         cdef np.float32_t norm
         cdef np.int64_t i
-        cdef np.int64_t j 
+        cdef np.int64_t j
         cdef np.float32_t smallest_dist
         cdef int n_occupied_points_ij = len(occupied_points_ij)
         for i in range(min_distances.shape[0]):
@@ -294,9 +294,9 @@ cdef class CMap2D:
         cdef np.int64_t pj
         cdef np.float32_t norm
         cdef np.int64_t i
-        cdef np.int64_t j 
+        cdef np.int64_t j
         cdef np.int64_t iend
-        cdef np.int64_t jend 
+        cdef np.int64_t jend
 
         for k in range(len(occupied_points_ij)):
             point = occupied_points_ij[k]
@@ -601,9 +601,9 @@ cdef class CMap2D:
 
 
 
-        
+
     def fastmarch(self, goal_ij, mask=None, speeds=None):
-        """ 
+        """
 
         Nodes are cells in a 2d grid
 
@@ -736,7 +736,7 @@ cdef class CMap2D:
         return tentative
 
     def dijkstra(self, goal_ij, mask=None, extra_costs=None, inv_value=None, connectedness=8):
-        """ 4, 8, 16, or 32 connected dijkstra 
+        """ 4, 8, 16, or 32 connected dijkstra
 
         Nodes are cells in a 2d grid
         Assumes edge costs are xy distance between two nodes
@@ -932,7 +932,7 @@ cdef class CMap2D:
         centers_l = np.arctan2(centers_j, centers_i)
         # Circle in polar coord: r^2 - 2*r*r0*cos(phi-lambda) + r0^2 = R^2
         # Solve equation for r at angle phi in polar coordinates, of circle of center (r0, lambda)
-        # and radius R. -> 2 solutions for r knowing r0, phi, lambda, R: 
+        # and radius R. -> 2 solutions for r knowing r0, phi, lambda, R:
         # r = r0*cos(phi-lambda) - sqrt( r0^2*cos^2(phi-lambda) - r0^2 + R^2 )
         # r = r0*cos(phi-lambda) + sqrt( r0^2*cos^2(phi-lambda) - r0^2 + R^2 )
         # solutions are real only if term inside sqrt is > 0
@@ -1060,7 +1060,7 @@ cdef class CMap2D:
                     k += 1
                 # Circle in polar coord: r^2 - 2*r*r0*cos(phi-lambda) + r0^2 = R^2
                 # Solve equation for r at angle phi in polar coordinates, of circle of center (r0, lambda)
-                # and radius R. -> 2 solutions for r knowing r0, phi, lambda, R: 
+                # and radius R. -> 2 solutions for r knowing r0, phi, lambda, R:
                 # r = r0*cos(phi-lambda) - sqrt( r0^2*cos^2(phi-lambda) - r0^2 + R^2 )
                 # r = r0*cos(phi-lambda) + sqrt( r0^2*cos^2(phi-lambda) - r0^2 + R^2 )
                 # solutions are real only if term inside sqrt is > 0
@@ -1070,7 +1070,7 @@ cdef class CMap2D:
                 if angle_min >= angle_max:
                     raise ValueError("angles expected to be ordered from min to max.")
                 # angle_0_ref is a multiple of 2pi, the closest one smaller than angles[0]
-                # assuming a scan covers less than full circle, all angles in the scan should lie 
+                # assuming a scan covers less than full circle, all angles in the scan should lie
                 # between angle_0_ref and angle_0_ref + 2* 2pi (two full circles)
                 angle_0_ref = 2*PI * (angle_min // (2*PI))
                 for i in range(n_centers):
@@ -1080,7 +1080,7 @@ cdef class CMap2D:
                     R = radii_ij[i]
                     # we can first check at what angles this holds.
                     # there should be two extrema for the circle in phi, which are solutions for:
-                    # r0^2*cos^2(phi-lambda) - r0^2 + R^2 = 0 
+                    # r0^2*cos^2(phi-lambda) - r0^2 + R^2 = 0
                     # the two solutions are:
                     # phi = lambda + 2*pi*n +- arccos( +- sqrt(r0^2 - R^2) / r0 )
                     # these exist only if r0 > R and r0 != 0
@@ -1181,7 +1181,7 @@ cdef class CMap2D:
             centers_l[i2] = np.arctan2(centers_j[i2], centers_i[i2])
         # Circle in polar coord: r^2 - 2*r*r0*cos(phi-lambda) + r0^2 = R^2
         # Solve equation for r at angle phi in polar coordinates, of circle of center (r0, lambda)
-        # and radius R. -> 2 solutions for r knowing r0, phi, lambda, R: 
+        # and radius R. -> 2 solutions for r knowing r0, phi, lambda, R:
         # r = r0*cos(phi-lambda) - sqrt( r0^2*cos^2(phi-lambda) - r0^2 + R^2 )
         # r = r0*cos(phi-lambda) + sqrt( r0^2*cos^2(phi-lambda) - r0^2 + R^2 )
         # solutions are real only if term inside sqrt is > 0
@@ -1191,7 +1191,7 @@ cdef class CMap2D:
                 return False
         # we can first check at what angles this holds.
         # there should be two extrema for the circle in phi, which are solutions for:
-        # r0^2*cos^2(phi-lambda) - r0^2 + R^2 = 0 
+        # r0^2*cos^2(phi-lambda) - r0^2 + R^2 = 0
         # the two solutions are:
         # phi = lambda + 2*pi*n +- arccos( +- sqrt(r0^2 - R^2) / r0 )
         # these exist only if r0 > R and r0 != 0
@@ -1201,7 +1201,7 @@ cdef class CMap2D:
         if angle_min >= angle_max:
             raise ValueError("angles expected to be ordered from min to max.")
         # angle_0_ref is a multiple of 2pi, the closest one smaller than angles[0]
-        # assuming a scan covers less than full circle, all angles in the scan should lie 
+        # assuming a scan covers less than full circle, all angles in the scan should lie
         # between angle_0_ref and angle_0_ref + 2* 2pi (two full circles)
         cdef np.float32_t angle_0_ref = 2*np.pi * (angle_min // (2*np.pi))
         # loop variables
@@ -1258,6 +1258,7 @@ cdef class CMap2D:
                 ranges[idx] = min_solution
         return True
 
+
     def visibility_map(self, observer_ij, fov=None):
         return self.visibility_map_ij(observer_ij, fov=fov) * self.resolution()
 
@@ -1306,7 +1307,7 @@ cdef class CMap2D:
                 break
             i_inc_unit = ccos(angle)
             j_inc_unit = csin(angle)
-            # Stretch the ray so that every 1 unit in the ray direction lands on a cell in i or 
+            # Stretch the ray so that every 1 unit in the ray direction lands on a cell in i or
             i_abs_inc = abs(i_inc_unit)
             j_abs_inc = abs(j_inc_unit)
             raystretch = 1. / i_abs_inc if i_abs_inc >= j_abs_inc else 1. / j_abs_inc
@@ -1387,7 +1388,7 @@ cdef class CMap2D:
             angle = angles[k]
             i_inc_unit = ccos(angle)
             j_inc_unit = csin(angle)
-            # Stretch the ray so that every 1 unit in the ray direction lands on a cell in i or 
+            # Stretch the ray so that every 1 unit in the ray direction lands on a cell in i or
             i_abs_inc = abs(i_inc_unit)
             j_abs_inc = abs(j_inc_unit)
             raystretch = 1. / i_abs_inc if i_abs_inc >= j_abs_inc else 1. / j_abs_inc
@@ -1443,7 +1444,7 @@ cdef class CMap2D:
         grid.info.width = arr.shape[1]
         grid.info.origin.position.x = self.origin[0]
         grid.info.origin.position.y = self.origin[1]
-        return grid 
+        return grid
 
 cdef class CSimAgent:
     cdef public np.float32_t[:] pose_2d_in_map_frame
@@ -1465,7 +1466,7 @@ cdef class CSimAgent:
     @cython.nonecheck(False)
     @cython.cdivision(True)
     cdef cget_legs_pose2d_in_map(self,
-            np.float32_t[:, ::1] left_leg_pose2d_in_map_frame, 
+            np.float32_t[:, ::1] left_leg_pose2d_in_map_frame,
             np.float32_t[:, ::1] right_leg_pose2d_in_map_frame):
         if self.type != "legs":
             raise NotImplementedError
@@ -1490,7 +1491,7 @@ cdef class CSimAgent:
         right_leg_pose2d_in_agent_frame[0, 0] = front_travel
         right_leg_pose2d_in_agent_frame[0, 1] = side_travel + leg_side_offset
         right_leg_pose2d_in_agent_frame[0, 2] = 0
-        cdef np.float32_t[:, ::1] left_leg_pose2d_in_agent_frame = np.zeros((1,3), dtype=np.float32) 
+        cdef np.float32_t[:, ::1] left_leg_pose2d_in_agent_frame = np.zeros((1,3), dtype=np.float32)
         left_leg_pose2d_in_agent_frame[0, 0] = -1 * right_leg_pose2d_in_agent_frame[0, 0]
         left_leg_pose2d_in_agent_frame[0, 1] = -1 * right_leg_pose2d_in_agent_frame[0, 1]
         left_leg_pose2d_in_agent_frame[0, 2] = -1 * right_leg_pose2d_in_agent_frame[0, 2]
@@ -1538,6 +1539,112 @@ cdef class CSimAgent:
             raise NotImplementedError
 
 
+def flatten_contours(contours):
+    flat_contours = np.zeros((len(np.array(contours).flatten())/2, 3), dtype=np.float32)
+    v = 0
+    for idx, polygon in enumerate(contours):
+        for vertex in polygon:
+            flat_contours[v,:] = np.array([idx, vertex[0], vertex[1]])
+            v += 1
+    return flat_contours
+
+def render_contours_in_lidar(ranges, angles, flat_contours, lidar_xy):
+    crender_contours_in_lidar(ranges, angles.astype(np.float32), flat_contours, lidar_xy.astype(np.float32))
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.nonecheck(False)
+@cython.cdivision(True)
+cdef crender_contours_in_lidar(
+        np.ndarray[np.float32_t, ndim=1] ranges,
+        np.ndarray[np.float32_t, ndim=1] angles,
+        np.float32_t[:,::1] flat_contours, # (n_total_polygon_vertices, [polygon id, vertex_x, vertex_y])
+        np.ndarray[np.float32_t, ndim=1] lidar_xy,
+        ):
+    """ Takes a list of agents (shapes + position) and renders them into the occupancy grid
+    assumes the angles are ordered from lowest to highest, spaced evenly (const increment)
+    """
+    # consts
+    cdef int n_angles = len(ranges)
+    cdef np.float32_t ox = lidar_xy[0]
+    cdef np.float32_t oy = lidar_xy[1]
+    cdef int n_total_vertices = flat_contours.shape[0]
+    cdef int n_total_edges = n_total_vertices-1
+    if n_total_edges < 0:
+        n_total_edges = 0
+    # vars
+    cdef int i
+    cdef int v
+    cdef np.float32_t angle
+    cdef np.float32_t min_range
+    cdef np.float32_t e1x
+    cdef np.float32_t e1y
+    cdef np.float32_t e2x
+    cdef np.float32_t e2y
+    cdef np.float32_t a
+    cdef np.float32_t b
+    cdef np.float32_t c
+    cdef np.float32_t d
+    cdef np.float32_t e
+    cdef np.float32_t f
+    cdef np.float32_t det
+    cdef np.float32_t r
+    cdef np.float32_t t
+    for i in range(n_angles):  # for each ray
+        angle = angles[i]
+        min_range = ranges[i] # initialize with scan range
+        for v in range(n_total_edges):  # for each edge
+            # discard edge if it connects two different polygons
+            if flat_contours[v, 0] != flat_contours[v+1, 0]:
+                continue
+            # get the edge ends
+            e1x = flat_contours[v, 1]
+            e1y = flat_contours[v, 2]
+            e2x = flat_contours[v+1, 1]
+            e2y = flat_contours[v+1, 2]
+            # solve geometrical eq. (for r)
+            # ox + r cos(th) = e1x + t (e2x - e1x)
+            # oy + r sin(th) = e1y + t (e2y - e1y)
+            # constraints: 0 <= t <= 1, r >= 0
+            #
+            #  e1 x             /
+            #      \           /
+            #       \t        /
+            #        \/      /
+            #         \     /
+            #          \   /
+            #           \ /
+            #            \
+            #           / \
+            #          /   \
+            #        _/     x e2
+            #      r /\
+            #       /
+            #      o
+            #
+            # [a, b] [r] = [e]  -> [r] =  1   [d, -b] [e] 
+            # [c, d] [t] = [f]     [t] = det  [-c, a] [f]
+            a = ccos(angle)
+            b = -(e2x - e1x)
+            c = csin(angle)
+            d = -(e2y - e1y)
+            e = e1x - ox
+            f = e1y - oy
+            det = a*d - b*c
+            if det == 0:
+                continue
+            r = ( e*d - b*f ) / det
+            t = (-e*c + a*f ) / det
+            if t < 0:
+                continue
+            if t > 1:
+                continue
+            if r < 0:
+                continue
+            if r < min_range:
+                min_range = r
+        ranges[i] = min_range
+    return True
 
 
 @cython.boundscheck(False)
@@ -1551,7 +1658,7 @@ cdef cas_sdf(self, np.int64_t[:,::1] occupied_points_ij, np.float32_t[:, ::1] mi
     cdef np.int64_t pj
     cdef np.float32_t norm
     cdef np.int64_t i
-    cdef np.int64_t j 
+    cdef np.int64_t j
     cdef np.float32_t smallest_dist
     cdef int n_occupied_points_ij = len(occupied_points_ij)
     for i in range(min_distances.shape[0]):
@@ -1574,7 +1681,7 @@ cdef cdistance_transform_1d(np.float32_t[::1] f, np.float32_t[::1] D):
     cdef np.int64_t[::1] v = np.zeros((f.shape[0]), dtype=np.int64) # the positions of parabolas forming the lower envelope
     cdef np.int64_t k  = 0 # the amount of parabolas forming the lower envelope (- 1 for indexing)
     cdef np.int64_t max_k  = 0 # the amount of parabolas forming the lower envelope (- 1 for indexing)
-    cdef np.int64_t start = 0 
+    cdef np.int64_t start = 0
     cdef np.int64_t vk = 0 # var for speed
     z[0] = -np.inf # boundary with previous
     z[1] = np.inf # boundary with next
@@ -1654,7 +1761,7 @@ def apply_tf_to_pose(pose, pose2d):
 
 def apply_tf_to_vel(vel, pose2d):
     # same as apply_tf but assumes vel is xdot ydot thetadot instead of x y
-    # for xdot ydot frame transformation applies, 
+    # for xdot ydot frame transformation applies,
     # but thetadot is invariant due to frames being fixed.
     xy = rotate(np.array([vel[...,:2]]), pose2d[2])[0]
     th = vel[...,2]
