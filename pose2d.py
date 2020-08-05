@@ -21,9 +21,9 @@ def posemsg_to_pose2d(posemsg):
 
 def apply_tf(x, pose2d):
     """ Applies transform to x
-    x is a list of x y points
-    pose2d is the transform AT_B, 
-    i.e. trans/rot of frame B in frame A, thus AT_B * BX => AX
+    x is a list of x y points in frame B
+    pose2d is the transform AT_B, (frame B in frame A)
+    result is x in frame A
 
     Parameters
     ----------
@@ -50,9 +50,6 @@ def apply_tf(x, pose2d):
     array([[ 2.,  1.],
            [ 2.,  2.]])
     """
-    # x is in frame B
-    # pose2d is AT_B
-    # result is x in frame A
     return rotate(x, pose2d[2]) + np.array(pose2d[:2])
 
 def apply_tf_to_pose(pose, pose2d):

@@ -913,8 +913,8 @@ cdef class CMap2D:
             if agent.type != "legs":
                 raise NotImplementedError
             left_leg_pose2d_in_map_frame, right_leg_pose2d_in_map_frame = agent.get_legs_pose2d_in_map()
-            llc_ij = self.xy_to_ij(left_leg_pose2d_in_map_frame[:2])
-            rlc_ij = self.xy_to_ij(right_leg_pose2d_in_map_frame[:2])
+            llc_ij = self.xy_to_floatij(left_leg_pose2d_in_map_frame[:2], clip_if_outside=False)
+            rlc_ij = self.xy_to_floatij(right_leg_pose2d_in_map_frame[:2], clip_if_outside=False)
             leg_radius_ij = agent.leg_radius / self.resolution_
             # circle centers in 'lidar' frame (frame centered at lidar pos, but not rotated,
             # as angles in array are already rotated according to sensor angle in map frame)
@@ -994,8 +994,8 @@ cdef class CMap2D:
             agent = agents[n]
             cagent = CSimAgent(agent.pose_2d_in_map_frame, agent.state, agent.vel_in_map_frame)
             cagent.cget_legs_pose2d_in_map(left_leg_pose2d_in_map_frame, right_leg_pose2d_in_map_frame)
-            self.cxy_to_ij(left_leg_pose2d_in_map_frame[:1,:2], llc_ij)
-            self.cxy_to_ij(right_leg_pose2d_in_map_frame[:1, :2], rlc_ij)
+            self.cxy_to_ij(left_leg_pose2d_in_map_frame[:1,:2], llc_ij, clip_if_outside=False)
+            self.cxy_to_ij(right_leg_pose2d_in_map_frame[:1, :2], rlc_ij, clip_if_outside=False)
             leg_radii_ijs[n] = cagent.leg_radius / self.resolution_
             llcijs[n, 0, 0] = llc_ij[0, 0]
             llcijs[n, 0, 1] = llc_ij[0, 1]
@@ -1161,8 +1161,8 @@ cdef class CMap2D:
             agent = agents[n]
             cagent = CSimAgent(agent.pose_2d_in_map_frame, agent.state, agent.vel_in_map_frame)
             cagent.cget_legs_pose2d_in_map(left_leg_pose2d_in_map_frame, right_leg_pose2d_in_map_frame)
-            self.cxy_to_ij(left_leg_pose2d_in_map_frame[:1,:2], llc_ij)
-            self.cxy_to_ij(right_leg_pose2d_in_map_frame[:1, :2], rlc_ij)
+            self.cxy_to_ij(left_leg_pose2d_in_map_frame[:1,:2], llc_ij, clip_if_outside=False)
+            self.cxy_to_ij(right_leg_pose2d_in_map_frame[:1, :2], rlc_ij, clip_if_outside=False)
             leg_radius_ij = cagent.leg_radius / self.resolution_
             # circle centers in 'lidar' frame (frame centered at lidar pos, but not rotated,
             # as angles in array are already rotated according to sensor angle in map frame)
