@@ -913,8 +913,8 @@ cdef class CMap2D:
             if agent.type != "legs":
                 raise NotImplementedError
             left_leg_pose2d_in_map_frame, right_leg_pose2d_in_map_frame = agent.get_legs_pose2d_in_map()
-            llc_ij = self.xy_to_floatij(left_leg_pose2d_in_map_frame[:2], clip_if_outside=False)
-            rlc_ij = self.xy_to_floatij(right_leg_pose2d_in_map_frame[:2], clip_if_outside=False)
+            llc_ij = self.xy_to_floatij(left_leg_pose2d_in_map_frame[None,:2], clip_if_outside=False)
+            rlc_ij = self.xy_to_floatij(right_leg_pose2d_in_map_frame[None,:2], clip_if_outside=False)
             leg_radius_ij = agent.leg_radius / self.resolution_
             # circle centers in 'lidar' frame (frame centered at lidar pos, but not rotated,
             # as angles in array are already rotated according to sensor angle in map frame)
