@@ -1,3 +1,4 @@
+import numpy
 from distutils.core import setup
 from Cython.Build import cythonize
 import os
@@ -10,4 +11,5 @@ setup(
     version='1.0',
     py_modules=['map2d', 'pose2d', 'circular_index', 'map2d_ros_tools'],
     ext_modules = cythonize("CMap2D.pyx", annotate=True),
+    include_dirs=[numpy.get_include()],
 )
