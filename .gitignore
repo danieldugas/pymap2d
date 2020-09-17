@@ -3,4 +3,5 @@ CMap2D.html
 *.pyc
 build/
 CMap2D.so
+*.so
 *egg-info/
