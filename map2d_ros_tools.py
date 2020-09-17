@@ -1,7 +1,23 @@
 import rospy
-import tf
 from threading import Lock
 from CMap2D import CMap2D
+
+def remove_python2_entries_from_sys_path():
+    """ sourcing ros means adding its python2 paths to sys.path. This creates incompatibilities when
+    importing tf, so we remove them """
+    import sys
+    if sys.version[0] == str(3):
+        new_path = []
+        for p in sys.path:
+            if "python2" in p:
+                print("REMOVING python2 entry from sys.path: {}".format(p))
+                continue
+            new_path.append(p)
+        sys.path = new_path
+
+
+remove_python2_entries_from_sys_path()
+import tf
 
 def default_refmap_update_callback(self_):
     pass
