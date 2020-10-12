@@ -1,6 +1,8 @@
 import rospy
 from threading import Lock
 from CMap2D import CMap2D
+# if this is after remove_python2..., somehow python2 and python3 mismatch leads to non-connecting topics
+from nav_msgs.msg import OccupancyGrid
 
 def remove_python2_entries_from_sys_path():
     """ sourcing ros means adding its python2 paths to sys.path. This creates incompatibilities when
@@ -39,7 +41,6 @@ class ReferenceMapAndLocalizationManager(object):
         if map_folder == "rostopic":
             self.refmap_is_dynamic = True
             rospy.logwarn("Getting reference map from topic '{}'".format(map_filename))
-            from nav_msgs.msg import OccupancyGrid
             rospy.Subscriber(map_filename, OccupancyGrid, self.map_callback, queue_size=1)
         else:
             # loads map based on ros params
