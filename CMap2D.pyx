@@ -992,7 +992,8 @@ cdef class CMap2D:
         cdef np.float32_t[:] leg_radii_ijs  = np.zeros((n_agents,), dtype=np.float32)
         for n in range(n_agents):
             agent = agents[n]
-            cagent = CSimAgent(agent.pose_2d_in_map_frame, agent.state, agent.vel_in_map_frame)
+            cagent = CSimAgent(agent.pose_2d_in_map_frame, agent.state, agent.vel_in_map_frame,
+                               agent.type, agent.leg_radius)
             cagent.cget_legs_pose2d_in_map(left_leg_pose2d_in_map_frame, right_leg_pose2d_in_map_frame)
             self.cxy_to_ij(left_leg_pose2d_in_map_frame[:1,:2], llc_ij, clip_if_outside=False)
             self.cxy_to_ij(right_leg_pose2d_in_map_frame[:1, :2], rlc_ij, clip_if_outside=False)
@@ -1159,7 +1160,8 @@ cdef class CMap2D:
         cdef np.float32_t leg_radius_ij
         for n in range(len(agents)):
             agent = agents[n]
-            cagent = CSimAgent(agent.pose_2d_in_map_frame, agent.state, agent.vel_in_map_frame)
+            cagent = CSimAgent(agent.pose_2d_in_map_frame, agent.state, agent.vel_in_map_frame,
+                               agent.type, agent.leg_radius)
             cagent.cget_legs_pose2d_in_map(left_leg_pose2d_in_map_frame, right_leg_pose2d_in_map_frame)
             self.cxy_to_ij(left_leg_pose2d_in_map_frame[:1,:2], llc_ij, clip_if_outside=False)
             self.cxy_to_ij(right_leg_pose2d_in_map_frame[:1, :2], rlc_ij, clip_if_outside=False)
@@ -1453,12 +1455,18 @@ cdef class CSimAgent:
     cdef public np.float32_t[:] state
     cdef public float leg_radius
 
-    def __cinit__(self, pose, state, vel):
+    def __cinit__(self, pose, state, vel, type_="legs", radius=0.03):
+        """ pose: [px, py, th] in map frame
+            state: [Dx, Dy, Dth] 'distance travelled' in each dim
+            vel: [vx, vy, w] in map frame
+            type: "legs" or "trunk"
+            radius: leg radius if legs, trunk radius if trunk
+        """
         self.pose_2d_in_map_frame = pose
         self.vel_in_map_frame = vel
-        self.type = "legs"
+        self.type = type_
         self.state = state
-        self.leg_radius = 0.03 # [m]
+        self.leg_radius = radius # [m]
 
 
     @cython.boundscheck(False)
@@ -1468,37 +1476,55 @@ cdef class CSimAgent:
     cdef cget_legs_pose2d_in_map(self,
             np.float32_t[:, ::1] left_leg_pose2d_in_map_frame,
             np.float32_t[:, ::1] right_leg_pose2d_in_map_frame):
-        if self.type != "legs":
+        cdef np.float32_t[:] m_a_T
+        cdef np.float32_t vel_norm
+        cdef np.float32_t leg_radius
+        cdef np.float32_t leg_side_offset
+        cdef np.float32_t leg_side_amplitude
+        cdef np.float32_t leg_front_amplitude
+        cdef np.float32_t front_travel
+        cdef np.float32_t side_travel
+        cdef np.float32_t[:, ::1] right_leg_pose2d_in_agent_frame
+        cdef np.float32_t[:, ::1] left_leg_pose2d_in_agent_frame
+        if self.type == "trunk":
+            left_leg_pose2d_in_map_frame[0, 0] = self.pose_2d_in_map_frame[0]
+            left_leg_pose2d_in_map_frame[0, 1] = self.pose_2d_in_map_frame[1]
+            left_leg_pose2d_in_map_frame[0, 2] = self.pose_2d_in_map_frame[2]
+            right_leg_pose2d_in_map_frame[0, 0] = self.pose_2d_in_map_frame[0]
+            right_leg_pose2d_in_map_frame[0, 1] = self.pose_2d_in_map_frame[1]
+            right_leg_pose2d_in_map_frame[0, 2] = self.pose_2d_in_map_frame[2]
+        elif self.type == "legs":
+            m_a_T = self.pose_2d_in_map_frame
+            vel_norm = csqrt(self.vel_in_map_frame[0]**2 + self.vel_in_map_frame[1]**2)
+            leg_radius = self.leg_radius # [m]
+            leg_side_offset = 0.1 # [m]
+            leg_side_amplitude = 0.1 # [m] half amplitude
+            leg_front_amplitude = max(0.01, min(0.3, # [m]
+                                                0.3 * vel_norm / 0.5))
+            # get position of each leg w.r.t agent (x is 'forward')
+            # travel is a sine function relative to how fast the agent is moving in x y
+            front_travel =  leg_front_amplitude * ccos(
+                    self.state[0] * 2. / leg_front_amplitude # assuming dx = 2 dphi / A
+                    + self.state[2] # adds a little movement when rotating
+                    )
+            side_travel =  leg_side_amplitude * ccos(
+                    self.state[1] * 2. / leg_side_amplitude
+                    + self.state[2]
+                    )
+            right_leg_pose2d_in_agent_frame = np.zeros((1,3), dtype=np.float32)
+            left_leg_pose2d_in_agent_frame = np.zeros((1,3), dtype=np.float32)
+            right_leg_pose2d_in_agent_frame[0, 0] = front_travel
+            right_leg_pose2d_in_agent_frame[0, 1] = side_travel + leg_side_offset
+            right_leg_pose2d_in_agent_frame[0, 2] = 0
+            left_leg_pose2d_in_agent_frame[0, 0] = -1 * right_leg_pose2d_in_agent_frame[0, 0]
+            left_leg_pose2d_in_agent_frame[0, 1] = -1 * right_leg_pose2d_in_agent_frame[0, 1]
+            left_leg_pose2d_in_agent_frame[0, 2] = -1 * right_leg_pose2d_in_agent_frame[0, 2]
+            capply_tf_to_pose(
+                    left_leg_pose2d_in_agent_frame, m_a_T, left_leg_pose2d_in_map_frame)
+            capply_tf_to_pose(
+                    right_leg_pose2d_in_agent_frame, m_a_T, right_leg_pose2d_in_map_frame)
+        else:
             raise NotImplementedError
-        cdef np.float32_t[:] m_a_T = self.pose_2d_in_map_frame
-        cdef np.float32_t vel_norm = csqrt(self.vel_in_map_frame[0]**2 + self.vel_in_map_frame[1]**2)
-        cdef np.float32_t leg_radius = self.leg_radius # [m]
-        cdef np.float32_t leg_side_offset = 0.1 # [m]
-        cdef np.float32_t leg_side_amplitude = 0.1 # [m] half amplitude
-        cdef np.float32_t leg_front_amplitude = max(0.01, min(0.3, # [m]
-                                                              0.3 * vel_norm / 0.5))
-        # get position of each leg w.r.t agent (x is 'forward')
-        # travel is a sine function relative to how fast the agent is moving in x y
-        cdef np.float32_t front_travel =  leg_front_amplitude * ccos(
-                self.state[0] * 2. / leg_front_amplitude # assuming dx = 2 dphi / A
-                + self.state[2] # adds a little movement when rotating
-                )
-        cdef np.float32_t side_travel =  leg_side_amplitude * ccos(
-                self.state[1] * 2. / leg_side_amplitude
-                + self.state[2]
-                )
-        cdef np.float32_t[:, ::1] right_leg_pose2d_in_agent_frame = np.zeros((1,3), dtype=np.float32)
-        right_leg_pose2d_in_agent_frame[0, 0] = front_travel
-        right_leg_pose2d_in_agent_frame[0, 1] = side_travel + leg_side_offset
-        right_leg_pose2d_in_agent_frame[0, 2] = 0
-        cdef np.float32_t[:, ::1] left_leg_pose2d_in_agent_frame = np.zeros((1,3), dtype=np.float32)
-        left_leg_pose2d_in_agent_frame[0, 0] = -1 * right_leg_pose2d_in_agent_frame[0, 0]
-        left_leg_pose2d_in_agent_frame[0, 1] = -1 * right_leg_pose2d_in_agent_frame[0, 1]
-        left_leg_pose2d_in_agent_frame[0, 2] = -1 * right_leg_pose2d_in_agent_frame[0, 2]
-        capply_tf_to_pose(
-                left_leg_pose2d_in_agent_frame, m_a_T, left_leg_pose2d_in_map_frame)
-        capply_tf_to_pose(
-                right_leg_pose2d_in_agent_frame, m_a_T, right_leg_pose2d_in_map_frame)
 
     def get_legs_pose2d_in_map(self):
         left_leg_pose2d_in_map_frame = np.zeros((1,3), dtype=np.float32)
