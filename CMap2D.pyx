@@ -1924,6 +1924,11 @@ cdef cpath_from_dijkstra_field(np.float32_t[:,::1] costmap, np.int64_t[::1] firs
             selected_offset_id = tied_firstplace_candidates[stochastic_candidate_pick]
         elif n_best_edges == 1:
             selected_offset_id = tied_firstplace_candidates[0]
+        else:
+            print(best_offset_edge_cost)
+            print(offset_edge_costs)
+            print("Warning: this code should be unreachable")
+            break
         jump_log.append(n_best_edges)
         current_idxi = current_idxi + offsets[selected_offset_id, 0]
         current_idxj = current_idxj + offsets[selected_offset_id, 1]
