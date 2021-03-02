@@ -1847,6 +1847,7 @@ cdef cpath_from_dijkstra_field(np.float32_t[:,::1] costmap, np.int64_t[::1] firs
     path = []
     jump_log = []
     path.append([first[0], first[1]])
+    cdef int n
     cdef np.int64_t n_offsets = len(offsets)
     cdef np.int64_t maxi = costmap.shape[0]
     cdef np.int64_t maxj = costmap.shape[1]
@@ -1860,7 +1861,7 @@ cdef cpath_from_dijkstra_field(np.float32_t[:,::1] costmap, np.int64_t[::1] firs
     cdef np.float32_t olen
     cdef np.float32_t[::1] offset_edge_costs = np.zeros((n_offsets,), dtype=np.float32)
     cdef np.float32_t offset_edge_cost
-    cdef np.float32_t best_offset_edge_cost
+    cdef int best_offset_edge_cost_id
     cdef np.int64_t n_best_edges
     cdef np.int64_t[::1] tied_firstplace_candidates = np.zeros((n_offsets,), dtype=np.int64)
     cdef np.int64_t stochastic_candidate_pick
@@ -1869,7 +1870,7 @@ cdef cpath_from_dijkstra_field(np.float32_t[:,::1] costmap, np.int64_t[::1] firs
     while True:
         current_cost = costmap[current_idxi, current_idxj]
         # lookup all edge costs and find lowest cost which is also < 0
-        best_offset_edge_cost = 0
+        best_offset_edge_cost_id = 0
         for n in range(n_offsets):
             oi = offsets[n, 0]
             oj = offsets[n, 1]
@@ -1904,18 +1905,21 @@ cdef cpath_from_dijkstra_field(np.float32_t[:,::1] costmap, np.int64_t[::1] firs
             # in 8/16 connectedness some offsets are 'longer' and will be preferred unless normalized
             olen = csqrt(oi*oi + oj*oj)
             offset_edge_cost = offset_edge_cost / olen
+            # fix nan values
+            if np.isnan(offset_edge_cost):
+                offset_edge_cost = np.inf
             # store for later
             offset_edge_costs[n] = offset_edge_cost
-            if offset_edge_cost < best_offset_edge_cost:
-                best_offset_edge_cost = offset_edge_cost
+            if offset_edge_cost < offset_edge_costs[best_offset_edge_cost_id]:
+                best_offset_edge_cost_id = n
         # find how many choice are tied for best cost, if several, sample stochastically
         n_best_edges = 0
-        if best_offset_edge_cost >= 0:
+        if offset_edge_costs[best_offset_edge_cost_id] >= 0:
             # local minima reached, terminate
             jump_log.append(n_best_edges)
             break
         for n in range(n_offsets):
-            if offset_edge_costs[n] == best_offset_edge_cost:
+            if offset_edge_costs[n] == offset_edge_costs[best_offset_edge_cost_id]:
                 tied_firstplace_candidates[n_best_edges] = n
                 n_best_edges += 1
         if n_best_edges > 1:
@@ -1925,8 +1929,9 @@ cdef cpath_from_dijkstra_field(np.float32_t[:,::1] costmap, np.int64_t[::1] firs
         elif n_best_edges == 1:
             selected_offset_id = tied_firstplace_candidates[0]
         else:
-            print(best_offset_edge_cost)
-            print(offset_edge_costs)
+            print(best_offset_edge_cost_id)
+            for n in range(n_offsets):
+                print(offset_edge_costs[n])
             print("Warning: this code should be unreachable")
             break
         jump_log.append(n_best_edges)

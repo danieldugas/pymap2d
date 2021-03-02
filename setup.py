@@ -12,7 +12,7 @@ setup(
     long_description=long_description,
     long_description_content_type='text/markdown',
     url="https://github.com/danieldugas/pymap2d",
-    version='0.1.1',
+    version='0.1.4',
     py_modules=['map2d', 'pose2d', 'circular_index', 'map2d_ros_tools'],
     ext_modules=cythonize("CMap2D.pyx", annotate=True),
     include_dirs=[numpy.get_include()],
