@@ -24,6 +24,14 @@ import tf
 def default_refmap_update_callback(self_):
     pass
 
+""" so many nodes end up implementing this functionality, it made sense to create
+a class for it.
+
+This class loads and stores the reference map (for global planning, for example),
+and keeps track of the robot's pose in the map
+
+with refmap_update_callback, the user can specify a task to perform each time the map is updated
+"""
 class ReferenceMapAndLocalizationManager(object):
     """ If a reference map is provided and a tf exists,
     keeps track of the tf for given frame in the reference map frame """
