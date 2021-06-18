@@ -58,6 +58,26 @@ def apply_tf_to_pose(pose, pose2d):
     th = pose[2] + pose2d[2]
     return np.array([xy[0], xy[1], th])
 
+def apply_tf_to_poses(poses, pose2d):
+    """
+    Parameters
+    ----------
+        poses: np.array
+            Array of shape (N, 3), x, y, theta components of tfs of frame C in frame B)
+        pose2d : np.array
+            Array of shape (3,), x, y, theta components of the tf of frame B in frame A
+    Returns
+    -------
+        result: np.array
+            Array of shape (N, 3), x, y theta components of the tf of frame C in frame A
+    """
+    result = np.zeros_like(poses)
+    xy = rotate(poses[:, :2], pose2d[2]) + pose2d[:2][None, :]
+    th = poses[:, 2] + pose2d[2]
+    result[:, :2] = xy
+    result[:, 2] = th
+    return result
+
 def apply_tf_to_vel(vel, pose2d):
     # same as apply_tf but assumes vel is xdot ydot thetadot instead of x y
     # for xdot ydot frame transformation applies, 
@@ -78,7 +98,7 @@ def rotate(x, th):
     rotmat = np.array([
         [np.cos(th), -np.sin(th)],
         [np.sin(th), np.cos(th)],
-        ])
+    ])
     return np.matmul(rotmat, x.T).T
 
 def inverse_pose2d(pose2d):
