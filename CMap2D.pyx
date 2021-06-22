@@ -148,6 +148,36 @@ cdef class CMap2D:
 #         ij_laser_orig = (-self.origin / self.resolution_).astype(int)
 #         compiled_reverse_raytrace(ij_hits, ij_laser_orig, self.occupancy_) # TODO
 
+    def from_closed_obst_vertices(self, contours, resolution=0.05):
+        """ contours is a list of lists of vertices, in clockwise order (counterclockwise for bounding obstacles)
+        """
+        unsorted_vertices = np.array([vert for c in contours for vert in c])
+        PAD = resolution * 2.
+        limits = np.array([[np.min(unsorted_vertices[:,0])-PAD, np.max(unsorted_vertices[:,0])+PAD],
+                           [np.min(unsorted_vertices[:,1])-PAD, np.max(unsorted_vertices[:,1])+PAD]],
+                          dtype=np.float32)
+        # fill map
+        self.origin = limits[:, 0]
+        width = int((limits[0, 1] - limits[0, 0]) / resolution)
+        height = int((limits[1, 1] - limits[1, 0]) / resolution)
+        self.occupancy_shape0 = width
+        self.occupancy_shape1 = height
+        self.resolution_ = resolution
+        self._thresh_occupied = 0.9
+        self.thresh_free = 0.1
+        # stencil occupancy by walking along edges (at half resolution step)
+        occupancy = 0.05 * np.ones((width, height), dtype=np.float32)
+        for c in contours:
+            verts = np.concatenate((c, [c[0]]), axis=0) # convert to array and connect first/last vert
+            for va, vb in zip(verts[:-1], verts[1:]):
+                delta = vb - va
+                edgelength = np.linalg.norm(delta)
+                nsteps = int(np.ceil(edgelength * 2. / resolution))
+                t = np.linspace(0., 1., nsteps)
+                steps = va[None, :] + t[:, None] * delta[None, :]
+                steps_ij = self.xy_to_ij(steps)
+                occupancy[tuple(steps_ij.T)] = 0.95
+        self._occupancy = occupancy
 
     def serialize(self):
         return {
