@@ -1,23 +1,28 @@
 # pymap2d
 
-Map2D is a simple python 2D gridmap class,
-able to load 2d maps from ROS .yaml/.pgm maps.
+pymap2d is a Cython-based fast toolbox for 2d grid maps.
 
-Map2D provides:
-- simple xy <-> ij coordinate conversions,
-- implementation of the dijkstra algorithm.
-- 2D ESDF calculation
+The CMap2D class provides:
+- simple xy <-> ij coordinate conversions
+- implementation of the dijkstra / fastmarch algorithm
+- fast 2D distance transform (ESDF)
+- conversions:
+  - to/from polygon vertices
+  - from ROS occupancy map or lidar scan message
+  - serialization to/from dict
 
-CMap2D is a Cython-based performance optimized version of Map2D,
-providing fast 2D ESDF calculation from occupancy grids.
+![pymap2d][media/pymap2d.png]
+
+Note: rather than carefully designed, this codebase was chaotically grown. 
+It is in dire need of refactoring / documentation. I hope it still proves useful.
 
 ## Dependency: Cython
 ```
-$ pip install Cython
+$ pip install numpy Cython
 ```
 
 ## Installation:
 Inside this project root folder:
 ```
-$ pip install .
+$ pip install pymap2d
 ```

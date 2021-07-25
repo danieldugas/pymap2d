@@ -1478,6 +1478,15 @@ cdef class CMap2D:
         grid.info.origin.position.y = self.origin[1]
         return grid
 
+    def get_extent_xy(self):
+        """ returns a list with the minimum and maximum x coordinates of the map
+        [xmin, xmax, ymin, ymax]"""
+        imax, jmax = self.occupancy().shape
+        ijcorners = np.array([[0,0], [imax-1, jmax-1]])
+        xycorners = self.ij_to_xy(ijcorners)
+        extent = [xycorners[0, 0], xycorners[1, 0], xycorners[0, 1], xycorners[1, 1]]
+        return extent
+
 cdef class CSimAgent:
     cdef public np.float32_t[:] pose_2d_in_map_frame
     cdef public np.float32_t[:] vel_in_map_frame
