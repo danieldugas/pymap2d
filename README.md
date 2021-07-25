@@ -11,7 +11,7 @@ The CMap2D class provides:
   - from ROS occupancy map or lidar scan message
   - serialization to/from dict
 
-![pymap2d][media/pymap2d.png]
+![pymap2d](media/pymap2d.png)
 
 Note: rather than carefully designed, this codebase was chaotically grown. 
 It is in dire need of refactoring / documentation. I hope it still proves useful.
