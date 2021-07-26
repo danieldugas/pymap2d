@@ -32,14 +32,14 @@ def gridshow(*args, **kwargs):
     return plt.imshow(*(arg.T if i == 0 else arg for i, arg in enumerate(args)), **kwargs)
 
 cdef class CMap2D:
-    cdef public np.float32_t[:,::1] _occupancy # [:, ::1] means 2d c-contiguous
+    cdef public np.float32_t[:,::1] _occupancy  # (0 to 1) 1 means 100% certain occupied # [:, ::1] means 2d c-contiguous 
     cdef int occupancy_shape0
     cdef int occupancy_shape1
-    cdef float resolution_
+    cdef float resolution_  # [meters] side of 1 grid square
     cdef float _thresh_occupied
     cdef float thresh_free
-    cdef float HUGE_
-    cdef public np.float32_t[:] origin
+    cdef float HUGE_ # bigger than any possible distance in the map
+    cdef public np.float32_t[:] origin  # [meters] x y coordinates of point at i = j = 0
     def __init__(self, folder=None, name=None, silent=False):
         self._occupancy = np.ones((100, 100), dtype=np.float32) * 0.5
         self.occupancy_shape0 = 100
@@ -63,13 +63,12 @@ cdef class CMap2D:
             print("Map definition found. Loading map from {}".format(map_file))
         mapimage = imread(map_file)
         temp = (1. - mapimage.T[:, ::-1] / 254.).astype(np.float32)
-              # (0 to 1) 1 means 100% certain occupied
         mapimage = np.ascontiguousarray(temp)
         self._occupancy = mapimage
         self.occupancy_shape0 = mapimage.shape[0]
         self.occupancy_shape1 = mapimage.shape[1]
-        self.resolution_ = mapparams["resolution"]  # [meters] side of 1 grid square
-        self.origin = np.array(mapparams["origin"][:2]).astype(np.float32)  # [meters] x y coordinates of point at i = j = 0
+        self.resolution_ = mapparams["resolution"]
+        self.origin = np.array(mapparams["origin"][:2]).astype(np.float32)
         if mapparams["origin"][2] != 0:
             raise ValueError(
                 "Map files with a rotated frame (origin.theta != 0) are not"
@@ -78,7 +77,7 @@ cdef class CMap2D:
             )
         self._thresh_occupied = mapparams["occupied_thresh"]
         self.thresh_free = mapparams["free_thresh"]
-        self.HUGE_ = 100 * self.occupancy_shape0 * self.occupancy_shape1 # bigger than any possible distance in the map
+        self.HUGE_ = 100 * self.occupancy_shape0 * self.occupancy_shape1
         if self.resolution_ == 0:
             raise ValueError("resolution can not be 0")
 
@@ -536,6 +535,12 @@ cdef class CMap2D:
             np.logical_and,
             [i >= 0, i < self._occupancy.shape[0], j >= 0, j < self._occupancy.shape[1]],
         )
+
+    def origin_xy(self):
+        """ output:
+            ndarray of shape (2,) - xy coordinates [meters] of point at i = j = 0 """
+        origin = np.array(self.origin)
+        return origin
 
     def occupancy(self):
         occ = np.array(self._occupancy)
