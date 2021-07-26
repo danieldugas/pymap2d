@@ -51,7 +51,7 @@ Accessing occupancy data, origin, resolution (read-only)
 mymap.occupancy()
 
 # origin: (x, y) coordinates of point (i, j) = (0, 0)
-mymap.origin()
+mymap.origin_xy()
 
 # resolution: size of grid cell [meters]
 mymap.resolution()
