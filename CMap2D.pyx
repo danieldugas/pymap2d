@@ -568,6 +568,55 @@ cdef class CMap2D:
         min_distances[self.occupancy() > self.thresh_free] *= -1.
         return min_distances
 
+    def as_idx_array(self, axis=None):
+        """ Returns an array of shape a containing indices for a
+
+        Parameters
+        ----------
+        a : array_like
+            Array to be reshaped.
+        axis : int, None, list of ints, or 'all'
+            Axis along which to return indices. If None, the flat index.
+
+        Returns
+        -------
+        result : ndarray
+            Array of shape (a.shape, len(axis))
+            if axis is None or a single int, (a.shape,)
+        """
+        a = self.occupancy()
+        if axis is None:
+            return np.arange(len(a.flatten())).reshape(a.shape)
+        idxs = np.array(np.where(np.ones(a.shape))).T.reshape(a.shape + (-1,))
+        if axis == "all":
+            return idxs
+        return idxs[..., axis]
+
+    def as_xy_array(self):
+        """ returns an array containing xy coordinates at every cell """
+        idxarray = self.as_idx_array(axis='all')
+        flatidxarray = idxarray.reshape((-1, 2))
+        flatxyarray = self.ij_to_xy(flatidxarray)
+        xyarray = flatxyarray.reshape(idxarray.shape)
+        return xyarray
+
+    def as_meshgrid_ij(self):
+        """ returns a tuple of 2 arrays with same dimension as map, containing respectively 
+        i and j indices of each cell
+        ii, jj = map2d.as_meshgrid_ij()
+        """
+        idxarray = self.as_idx_array(axis='all')
+        ii, jj = np.moveaxis(idxarray, -1, 0)
+        return (ii, jj)
+
+    def as_meshgrid_xy(self):
+        """ returns a tuple of 2 arrays with same dimension as map, containing respectively 
+        x and y indices of each cell
+        xx, yy = map2d.as_meshgrid_xy()
+        """
+        xx, yy = np.moveaxis(self.as_xy_array(), -1, 0)
+        return (xx, yy)
+
     cpdef as_coarse_map2d(self, n=1):
         # recursion to provide a convenient way to coarsen x times
         if n > 1:
