@@ -66,4 +66,15 @@ in_ij_coordinates = mymap.xy_to_floatij(list_of_xy_points)
 as_indices = mymap.xy_to_ij(list_of_xy_points, clip_if_outside=True)
 ```
 
+gridshow is a convenience function, which wraps plt.imshow to intuitively visualize 2d array contents.
+It makes the first array dimension x axis and uses grayscale by default.
+
+```python
+from CMap2D import gridshow
+gridshow(mymap.occupancy())
+```
+
+![gridshow_vs_imshow](media/gridshow_vs_imshow.png)
+
+
 For more examples, see tests/example_*.py
