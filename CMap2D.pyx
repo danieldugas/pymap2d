@@ -32,6 +32,7 @@ def gridshow(*args, **kwargs):
     return plt.imshow(*(arg.T if i == 0 else arg for i, arg in enumerate(args)), **kwargs)
 
 cdef class CMap2D:
+    # these names are inconsistent, but kept for legacy reasons
     cdef public np.float32_t[:,::1] _occupancy  # (0 to 1) 1 means 100% certain occupied # [:, ::1] means 2d c-contiguous 
     cdef int occupancy_shape0
     cdef int occupancy_shape1
@@ -190,6 +191,8 @@ cdef class CMap2D:
             "origin": np.array(self.origin),
         }
     def unserialize(self, dict_):
+        # WARNING: changing the dict strings will break compatiblity with previously saved maps!
+        # (for example, IAN ros node saves maps as part of fixed state in log)
         self._occupancy = dict_["occupancy"]
         self.occupancy_shape0 = dict_["occupancy_shape0"]
         self.occupancy_shape1 = dict_["occupancy_shape1"]
