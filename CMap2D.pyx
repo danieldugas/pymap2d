@@ -82,6 +82,32 @@ cdef class CMap2D:
         if self.resolution_ == 0:
             raise ValueError("resolution can not be 0")
 
+    def from_array(self, occupancy, origin, resolution, thresh_free=0.1, thresh_occupied=0.9):
+        """ Ideally this would be the default constructor (for legacy reasons loading from file is kept)
+        as convention, the x y coordinates correspond to the first and second index (i and j), respectively
+        map[i, j]
+        i <-> x
+        j <-> y
+
+        arguments:
+            occupancy (ndarray): 2D array with occupancy values (0-1 if thresholds are not set)
+            origin (tuple of size 2): x, y coordinates [m] of bottom left grid cell (i=0, j=0)
+            resolution (float): cell size [m]
+            thresh_free (float): values less than this are considered not occupied
+            thresh_occupied (float): values more than this are considered occupied
+        """
+        data = np.ascontiguousarray(occupancy.astype(np.float32))
+        self._occupancy = data
+        self.occupancy_shape0 = data.shape[0]
+        self.occupancy_shape1 = data.shape[1]
+        self.resolution_ = float(resolution)
+        self.origin = np.array(origin).astype(np.float32)
+        self._thresh_occupied = float(thresh_occupied)
+        self.thresh_free = float(thresh_free)
+        self.HUGE_ = 100 * self.occupancy_shape0 * self.occupancy_shape1
+        if self.resolution_ == 0:
+            raise ValueError("resolution can not be 0")
+
     def empty_like(self):
         width_i = self._occupancy.shape[0]
         height_j = self._occupancy.shape[1]

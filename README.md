@@ -37,6 +37,9 @@ from CMap2D import CMap2D
 # empty map
 mymap = CMap2D()
 
+# from an array
+mymap.from_array(array, origin, resolution)
+
 # from a pgm file
 mymap = CMap2D("folder", "filename")
 
