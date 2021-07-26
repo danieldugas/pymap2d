@@ -77,4 +77,4 @@ gridshow(mymap.occupancy())
 ![gridshow_vs_imshow](media/gridshow_vs_imshow.png)
 
 
-For more examples, see tests/example_*.py
+For more examples, see [test](test)/example_*.py
