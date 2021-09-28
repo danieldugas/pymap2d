@@ -1689,7 +1689,7 @@ cdef class CSimAgent:
 
 def flatten_contours(contours):
     """ should be a list of lists! otherwise polygon + polygon[:1] is a mathematical op """
-    n_total_vertices = len(np.array(contours).flatten())/2 + len(contours)
+    n_total_vertices = np.sum([len(verts) for verts in contours]) + len(contours)
     flat_contours = np.zeros((n_total_vertices, 3), dtype=np.float32)
     v = 0
     for idx, polygon in enumerate(contours):
