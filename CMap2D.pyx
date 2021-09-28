@@ -174,11 +174,11 @@ cdef class CMap2D:
 #         ij_laser_orig = (-self.origin / self.resolution_).astype(int)
 #         compiled_reverse_raytrace(ij_hits, ij_laser_orig, self.occupancy_) # TODO
 
-    def from_closed_obst_vertices(self, contours, resolution=0.05):
+    def from_closed_obst_vertices(self, contours, resolution=0.05, pad_ij=2.):
         """ contours is a list of lists of vertices, in clockwise order (counterclockwise for bounding obstacles)
         """
         unsorted_vertices = np.array([vert for c in contours for vert in c])
-        PAD = resolution * 2.
+        PAD = resolution * pad_ij
         limits = np.array([[np.min(unsorted_vertices[:,0])-PAD, np.max(unsorted_vertices[:,0])+PAD],
                            [np.min(unsorted_vertices[:,1])-PAD, np.max(unsorted_vertices[:,1])+PAD]],
                           dtype=np.float32)
