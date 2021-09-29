@@ -191,14 +191,19 @@ cdef class CMap2D:
         self.resolution_ = resolution
         self._thresh_occupied = 0.9
         self.thresh_free = 0.1
-        # stencil occupancy by walking along edges (at half resolution step)
         occupancy = 0.05 * np.ones((width, height), dtype=np.float32)
+        self._occupancy = occupancy
+        self.fill_polygon_obstacles(contours)
+
+    def fill_polygon_obstacles(self, contours):
+        # stencil occupancy by walking along polygon edges (at half resolution step)
+        occupancy = np.array(self._occupancy)
         for c in contours:
             verts = np.concatenate((c, [c[0]]), axis=0) # convert to array and connect first/last vert
             for va, vb in zip(verts[:-1], verts[1:]):
                 delta = vb - va
                 edgelength = np.linalg.norm(delta)
-                nsteps = int(np.ceil(edgelength * 2. / resolution))
+                nsteps = int(np.ceil(edgelength * 2. / self.resolution_))
                 t = np.linspace(0., 1., nsteps)
                 steps = va[None, :] + t[:, None] * delta[None, :]
                 steps_ij = self.xy_to_ij(steps)
