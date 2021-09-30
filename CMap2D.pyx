@@ -618,7 +618,7 @@ cdef class CMap2D:
         a = self.occupancy()
         if axis is None:
             return np.arange(len(a.flatten())).reshape(a.shape)
-        idxs = np.array(np.where(np.ones(a.shape))).T.reshape(a.shape + (-1,))
+        idxs = np.array(np.where(np.ones(a.shape)), dtype=np.float32).T.reshape(a.shape + (-1,))
         if axis == "all":
             return idxs
         return idxs[..., axis]
