@@ -1378,7 +1378,6 @@ cdef class CMap2D:
                 ranges[idx] = min_solution
         return True
 
-
     def visibility_map(self, observer_ij, fov=None):
         return self.visibility_map_ij(observer_ij, fov=fov) * self.resolution()
 
@@ -1476,6 +1475,94 @@ cdef class CMap2D:
             if angle_increment == 0:
                 angle_increment = min_angle_increment
                 angle += angle_increment
+
+    def lidar_visibility_map_ij(self, observer_ij, angles, ranges):
+        """ given a lidar scan, returns areas in the map observed by the scan.
+        angles should be given in map frame, not in sensor frame. """
+        visibility_map = np.ones_like(self.occupancy(), dtype=np.float32) * -1
+        self.clidar_visibility_map_ij(np.array(observer_ij).astype(np.int64), angles, ranges, visibility_map)
+        return visibility_map
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    @cython.cdivision(True)
+    cdef clidar_visibility_map_ij(self, np.int64_t[::1] observer_ij,
+                                  np.float32_t[::1] angles, np.float32_t[::1] ranges,
+                                  np.float32_t[:, ::1] visibility_map):
+        cdef np.int64_t o_i = observer_ij[0]
+        cdef np.int64_t o_j = observer_ij[1]
+        cdef np.float32_t threshold = self._thresh_occupied
+        cdef np.int64_t shape0 = self.occupancy_shape0
+        cdef np.int64_t shape1 = self.occupancy_shape1
+        cdef np.float32_t i_inc_unit
+        cdef np.float32_t j_inc_unit
+        cdef np.float32_t i_abs_inc
+        cdef np.float32_t j_abs_inc
+        cdef np.float32_t raystretch
+        cdef np.int64_t max_inc
+        cdef np.int64_t max_i_inc
+        cdef np.int64_t max_j_inc
+        cdef np.float32_t i_inc
+        cdef np.float32_t j_inc
+        cdef np.float32_t n_i
+        cdef np.float32_t n_j
+        cdef np.int64_t in_i
+        cdef np.int64_t in_j
+        cdef np.float32_t occ
+        cdef np.int64_t di
+        cdef np.int64_t dj
+        cdef np.float32_t r
+        cdef np.float32_t max_r
+        cdef np.uint8_t is_hit
+        for i in range(len(angles)):
+            angle = angles[i]
+            max_r = ranges[i] / self.resolution_
+            i_inc_unit = ccos(angle)
+            j_inc_unit = csin(angle)
+            # Stretch the ray so that every 1 unit in the ray direction lands on a cell in i or
+            i_abs_inc = abs(i_inc_unit)
+            j_abs_inc = abs(j_inc_unit)
+            raystretch = 1. / i_abs_inc if i_abs_inc >= j_abs_inc else 1. / j_abs_inc
+            i_inc = i_inc_unit * raystretch
+            j_inc = j_inc_unit * raystretch
+            # max amount of increments before crossing the grid border
+            if i_inc == 0:
+                max_inc = <np.int64_t>((shape1 - 1 - o_j) / j_inc) if j_inc >= 0 else <np.int64_t>(o_j / -j_inc)
+            elif j_inc == 0:
+                max_inc = <np.int64_t>((shape0 - 1 - o_i) / i_inc) if i_inc >= 0 else <np.int64_t>(o_i / -i_inc)
+            else:
+                max_i_inc = <np.int64_t>((shape1 - 1 - o_j) / j_inc) if j_inc >= 0 else <np.int64_t>(o_j / -j_inc)
+                max_j_inc = <np.int64_t>((shape0 - 1 - o_i) / i_inc) if i_inc >= 0 else <np.int64_t>(o_i / -i_inc)
+                max_inc = max_i_inc if max_i_inc <= max_j_inc else max_j_inc
+            # Trace a ray
+            n_i = o_i + 0
+            n_j = o_j + 0
+            for n in range(1, max_inc-1):
+                n_i += i_inc
+                in_i = <np.int64_t>n_i
+                in_j = <np.int64_t>n_j
+                di = ( in_i - o_i )
+                dj = ( in_j - o_j )
+                r = sqrt(di*di + dj*dj)
+                visibility_map[in_i, in_j] = r
+                if r != 0:
+                    occ = self._occupancy[in_i, in_j]
+                    if occ >= threshold:
+                        break
+                n_j += j_inc
+                in_i = <np.int64_t>n_i
+                in_j = <np.int64_t>n_j
+                di = ( in_i - o_i )
+                dj = ( in_j - o_j )
+                r = sqrt(di*di + dj*dj)
+                visibility_map[in_i, in_j] = r
+                if r != 0:
+                    occ = self._occupancy[in_i, in_j]
+                    if occ >= threshold:
+                        break
+                if r > max_r:
+                    break
 
     cdef craymarch(self, np.int64_t[::1] observer_ij, np.int64_t[::1] angles, np.float32_t[::1] ranges):
         cdef np.int64_t o_i = observer_ij[0]
