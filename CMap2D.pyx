@@ -138,15 +138,15 @@ cdef class CMap2D:
 #         self._thresh_occupied # TODO
 #         self.thresh_free
 
-    def from_scan(self, scan, resolution=0.05, limits=None, inscribed_radius=None):
+    def from_scan(self, scan, resolution=0.05, limits=None, inscribed_radius=None, legacy=True):
         """ Creating a map from a scan places the x y origin in the center of the grid,
         and generates the occupancy field from the laser data.
         limits are in lidar frame (meters) [[xmin, xmax], [ymin, ymax]]
         """
         angles = np.arange(scan.angle_min,
                            scan.angle_max + scan.angle_increment,
-                           scan.angle_increment)[:len(scan.ranges)]
-        ranges = np.array(scan.ranges)
+                           scan.angle_increment, dtype=np.float32)[:len(scan.ranges)]
+        ranges = np.array(scan.ranges, dtype=np.float32)
         if inscribed_radius is not None:
             ranges[ranges < inscribed_radius] = np.inf
         xy_hits = (ranges * np.array([np.cos(angles), np.sin(angles)])).T
@@ -165,12 +165,18 @@ cdef class CMap2D:
         self.resolution_ = resolution
         self._thresh_occupied = 0.9
         self.thresh_free = 0.1
-        ij_hits = self.xy_to_ij(xy_hits, clip_if_outside=False)
-        is_inside = self.is_inside_ij(ij_hits.astype(np.float32))
-        ij_hits = ij_hits[np.where(is_inside)]
-        occupancy = 0.05 * np.ones((width, height), dtype=np.float32)
-        occupancy[tuple(ij_hits.T)] = 0.95
-        self._occupancy = occupancy
+        if legacy:
+            ij_hits = self.xy_to_ij(xy_hits, clip_if_outside=False)
+            is_inside = self.is_inside_ij(ij_hits.astype(np.float32))
+            ij_hits = ij_hits[np.where(is_inside)]
+            occupancy = 0.05 * np.ones((width, height), dtype=np.float32)
+            occupancy[tuple(ij_hits.T)] = 0.95
+            self._occupancy = occupancy
+        else:
+            observer_ij = self.xy_to_ij(np.array([[0, 0]]))[0]
+            occupancy = np.ones((width, height), dtype=np.float32) * 0.5
+            self.creverse_raytrace_lidar(np.array(observer_ij).astype(np.int64), angles, ranges, occupancy)
+            self._occupancy = occupancy
 #         ij_laser_orig = (-self.origin / self.resolution_).astype(int)
 #         compiled_reverse_raytrace(ij_hits, ij_laser_orig, self.occupancy_) # TODO
 
@@ -1562,6 +1568,74 @@ cdef class CMap2D:
                     if occ >= threshold:
                         break
                 if r > max_r:
+                    break
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    @cython.cdivision(True)
+    cdef creverse_raytrace_lidar(self, np.int64_t[::1] observer_ij,
+                                 np.float32_t[::1] angles, np.float32_t[::1] ranges,
+                                 np.float32_t[:, ::1] result):
+        cdef np.int64_t o_i = observer_ij[0]
+        cdef np.int64_t o_j = observer_ij[1]
+        cdef np.float32_t threshold = self._thresh_occupied
+        cdef np.int64_t shape0 = self.occupancy_shape0
+        cdef np.int64_t shape1 = self.occupancy_shape1
+        cdef np.float32_t i_inc_unit
+        cdef np.float32_t j_inc_unit
+        cdef np.float32_t i_abs_inc
+        cdef np.float32_t j_abs_inc
+        cdef np.float32_t raystretch
+        cdef np.int64_t max_inc
+        cdef np.int64_t max_i_inc
+        cdef np.int64_t max_j_inc
+        cdef np.float32_t i_inc
+        cdef np.float32_t j_inc
+        cdef np.float32_t n_i
+        cdef np.float32_t n_j
+        cdef np.int64_t in_i
+        cdef np.int64_t in_j
+        cdef np.float32_t occ
+        cdef np.int64_t di
+        cdef np.int64_t dj
+        cdef np.float32_t r
+        cdef np.float32_t max_r
+        cdef np.uint8_t is_hit
+        for i in range(len(angles)):
+            angle = angles[i]
+            max_r = ranges[i] / self.resolution_
+            i_inc_unit = ccos(angle)
+            j_inc_unit = csin(angle)
+            # Stretch the ray so that every 1 unit in the ray direction lands on a cell in i or
+            i_abs_inc = abs(i_inc_unit)
+            j_abs_inc = abs(j_inc_unit)
+            raystretch = 1. / i_abs_inc if i_abs_inc >= j_abs_inc else 1. / j_abs_inc
+            i_inc = i_inc_unit * raystretch
+            j_inc = j_inc_unit * raystretch
+            # max amount of increments before crossing the grid border
+            if i_inc == 0:
+                max_inc = <np.int64_t>((shape1 - 1 - o_j) / j_inc) if j_inc >= 0 else <np.int64_t>(o_j / -j_inc)
+            elif j_inc == 0:
+                max_inc = <np.int64_t>((shape0 - 1 - o_i) / i_inc) if i_inc >= 0 else <np.int64_t>(o_i / -i_inc)
+            else:
+                max_i_inc = <np.int64_t>((shape1 - 1 - o_j) / j_inc) if j_inc >= 0 else <np.int64_t>(o_j / -j_inc)
+                max_j_inc = <np.int64_t>((shape0 - 1 - o_i) / i_inc) if i_inc >= 0 else <np.int64_t>(o_i / -i_inc)
+                max_inc = max_i_inc if max_i_inc <= max_j_inc else max_j_inc
+            # Trace a ray
+            n_i = o_i + 0
+            n_j = o_j + 0
+            for n in range(1, max_inc-1):
+                n_i += i_inc
+                n_j += j_inc
+                in_i = <np.int64_t>n_i
+                in_j = <np.int64_t>n_j
+                di = ( in_i - o_i )
+                dj = ( in_j - o_j )
+                r = sqrt(di*di + dj*dj)
+                result[in_i, in_j] = 0.
+                if r >= max_r:
+                    result[in_i, in_j] = 1.
                     break
 
     cdef craymarch(self, np.int64_t[::1] observer_ij, np.int64_t[::1] angles, np.float32_t[::1] ranges):
